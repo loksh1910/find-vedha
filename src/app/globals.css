@@ -1,26 +1,201 @@
 @import "tailwindcss";
 
+/*
+  Find Vedha — design tokens. Dark-mode only. See DESIGN_SYSTEM.md.
+  Never hardcode hex in components — use the token utilities (bg-surface, text-muted, …).
+*/
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: dark;
+
+  /* neutrals / surfaces — soft blue-slate, never pure black */
+  --bg: #161b22;
+  --bg-inset: #12161c;
+  --surface: #1c232d;
+  --surface-2: #232c38;
+  --line: #2e3945;
+  --line-strong: #3b4855;
+
+  /* text */
+  --text: #e7edf4;
+  --text-muted: #9ba8b5;
+  --text-faint: #6a7683;
+
+  /* signal — the one accent (sodium-lamp amber) */
+  --signal: #f5b23e;
+  --signal-hover: #ffc15a;
+  --signal-ink: #161b22;
+
+  /* status */
+  --ok: #57c08a;
+  --danger: #e5657b;
+
+  /* transport semantics — RESERVED for the board / legend / transport chips */
+  --t-auto: #e6b12e;
+  --t-bus: #3e9b4f;
+  --t-metro: #ce4b4b;
+
+  /* tracker slot colours */
+  --tr-1: #3e9bff;
+  --tr-2: #8a7bff;
+  --tr-3: #c06bf0;
+  --tr-4: #ee5fa3;
+  --tr-5: #28c2a8;
+
+  /* radius */
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+
+  /* motion */
+  --ease: cubic-bezier(0.2, 0.6, 0.2, 1);
+  --d-fast: 100ms;
+  --d: 160ms;
+  --d-slow: 320ms;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-bg: var(--bg);
+  --color-bg-inset: var(--bg-inset);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+
+  --color-text: var(--text);
+  --color-muted: var(--text-muted);
+  --color-faint: var(--text-faint);
+
+  --color-signal: var(--signal);
+  --color-signal-hover: var(--signal-hover);
+  --color-signal-ink: var(--signal-ink);
+
+  --color-ok: var(--ok);
+  --color-danger: var(--danger);
+
+  --color-t-auto: var(--t-auto);
+  --color-t-bus: var(--t-bus);
+  --color-t-metro: var(--t-metro);
+
+  --color-tr-1: var(--tr-1);
+  --color-tr-2: var(--tr-2);
+  --color-tr-3: var(--tr-3);
+  --color-tr-4: var(--tr-4);
+  --color-tr-5: var(--tr-5);
+
+  --font-display: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, "SF Mono", Menlo, monospace;
+
+  --radius-sm: var(--r-sm);
+  --radius-md: var(--r-md);
+  --radius-lg: var(--r-lg);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html,
+body {
+  height: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  line-height: 1.55;
+}
+
+/* the data face always uses lined-up figures */
+.font-mono {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* eyebrow / blade label */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+::selection {
+  background: color-mix(in oklab, var(--signal) 30%, transparent);
+}
+
+:where(a, button, input, textarea, select, [role="button"], [tabindex]):focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+@keyframes fv-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.25);
+  }
+}
+
+@keyframes fv-drift {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -10px, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes fv-sweep {
+  from {
+    stroke-dashoffset: var(--fv-len, 1200);
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes fv-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
 }
