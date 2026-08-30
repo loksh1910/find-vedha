@@ -18,7 +18,7 @@ const STEPS = [
   },
   {
     n: "03",
-    title: "The Trackers hunt the map",
+    title: "The Detectives hunt the map",
     body: "Vedha moves in secret across Auto, Bus and Metro lines. Surface on rounds 3, 8, 13, 18 and 24.",
   },
 ];

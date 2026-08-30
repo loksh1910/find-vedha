@@ -4,10 +4,10 @@ export type SlotId = "vedha" | "t1" | "t2" | "t3" | "t4" | "t5";
 
 export type SlotDef = {
   id: SlotId;
-  kind: "vedha" | "tracker";
+  kind: "vedha" | "detective";
   /** Display name of the slot. */
   label: string;
-  /** Tracker index 1..5 (undefined for Vedha). */
+  /** Detective index 1..5 (undefined for Vedha). */
   n?: number;
   /** Colour name shown to players. */
   colour: string;
@@ -46,15 +46,15 @@ export const VEDHA_SLOT: SlotDef = {
   hex: HEX.signal,
 };
 
-export const TRACKER_SLOTS: SlotDef[] = [
-  { id: "t1", kind: "tracker", label: "Tracker 1", n: 1, colour: "Azure", varName: "--tr-1", hex: HEX.tr1 },
-  { id: "t2", kind: "tracker", label: "Tracker 2", n: 2, colour: "Indigo", varName: "--tr-2", hex: HEX.tr2 },
-  { id: "t3", kind: "tracker", label: "Tracker 3", n: 3, colour: "Violet", varName: "--tr-3", hex: HEX.tr3 },
-  { id: "t4", kind: "tracker", label: "Tracker 4", n: 4, colour: "Magenta", varName: "--tr-4", hex: HEX.tr4 },
-  { id: "t5", kind: "tracker", label: "Tracker 5", n: 5, colour: "Teal", varName: "--tr-5", hex: HEX.tr5 },
+export const DETECTIVE_SLOTS: SlotDef[] = [
+  { id: "t1", kind: "detective", label: "Detective 1", n: 1, colour: "Azure", varName: "--tr-1", hex: HEX.tr1 },
+  { id: "t2", kind: "detective", label: "Detective 2", n: 2, colour: "Indigo", varName: "--tr-2", hex: HEX.tr2 },
+  { id: "t3", kind: "detective", label: "Detective 3", n: 3, colour: "Violet", varName: "--tr-3", hex: HEX.tr3 },
+  { id: "t4", kind: "detective", label: "Detective 4", n: 4, colour: "Magenta", varName: "--tr-4", hex: HEX.tr4 },
+  { id: "t5", kind: "detective", label: "Detective 5", n: 5, colour: "Teal", varName: "--tr-5", hex: HEX.tr5 },
 ];
 
-export const ALL_SLOTS: SlotDef[] = [VEDHA_SLOT, ...TRACKER_SLOTS];
+export const ALL_SLOTS: SlotDef[] = [VEDHA_SLOT, ...DETECTIVE_SLOTS];
 
 export function slotDef(id: SlotId): SlotDef {
   return ALL_SLOTS.find((s) => s.id === id)!;
@@ -64,7 +64,7 @@ export function slotDef(id: SlotId): SlotDef {
  * Fill every unclaimed slot at the end of the 10s selection window.
  * - Players holding no slot are served first (fairness).
  * - Vedha, if unclaimed, is assigned like any other slot.
- * - With < 6 players some players end up holding 2+ Tracker slots.
+ * - With < 6 players some players end up holding 2+ Detective slots.
  * `rand` lets callers pass a seeded RNG for deterministic demos/tests.
  */
 export function autoFill(

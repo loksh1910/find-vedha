@@ -23,7 +23,7 @@ const plexMono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "Find Vedha",
   description:
-    "A hidden-chase party game on a stylised Chennai transit map. Make a private room, one of you is Vedha, the Trackers hunt.",
+    "A hidden-chase party game on a stylised Chennai transit map. Make a private room, one of you is Vedha, the Detectives hunt.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

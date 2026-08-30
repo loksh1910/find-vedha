@@ -59,7 +59,7 @@ export default function CreateRoomPage() {
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-sm text-text">Max players</div>
-                <div className="text-xs text-faint">1 Vedha + up to 5 Trackers</div>
+                <div className="text-xs text-faint">1 Vedha + up to 5 Detectives</div>
               </div>
               <div className="flex items-center gap-3">
                 <button
@@ -85,7 +85,7 @@ export default function CreateRoomPage() {
             <div className="flex items-center justify-between opacity-70">
               <div>
                 <div className="flex items-center gap-2 text-sm text-text">
-                  Fill empty Tracker slots with AI
+                  Fill empty Detective slots with AI
                   <span className="rounded-sm border border-line px-1.5 py-0.5 font-mono text-[0.625rem] uppercase tracking-wider text-faint">
                     Soon
                   </span>
@@ -94,7 +94,7 @@ export default function CreateRoomPage() {
                   For now, empty slots go to human players.
                 </div>
               </div>
-              <Switch checked={false} disabled aria-label="Fill empty Tracker slots with AI (coming soon)" />
+              <Switch checked={false} disabled aria-label="Fill empty Detective slots with AI (coming soon)" />
             </div>
 
             <p className="border-t border-line pt-4 text-xs text-faint">

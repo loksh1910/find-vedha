@@ -13,7 +13,7 @@
 | **Subject** | A hidden-chase deduction game on a stylised Chennai transit network. |
 | **Audience** | Friends playing together over video — game-literate, chess.com users. |
 | **The platform's job** | Get friends from "let's play" into a running game fast; between games, feel like a real competitive world. |
-| **Signature** | The **destination-blade** — a horizontal capsule with a 4px colour bar on its left edge and a monospace label. One idiom, used everywhere: transport legend, Tracker slot tags, section eyebrows, the invite code, later the move-log rows. Plus the ambient **route diagram** (faint nodes + connectors) behind signed-out screens and the Lobby→game transition. Boldness is spent here; everything else stays quiet. |
+| **Signature** | The **destination-blade** — a horizontal capsule with a 4px colour bar on its left edge and a monospace label. One idiom, used everywhere: transport legend, Detective slot tags, section eyebrows, the invite code, later the move-log rows. Plus the ambient **route diagram** (faint nodes + connectors) behind signed-out screens and the Lobby→game transition. Boldness is spent here; everything else stays quiet. |
 | **Risk taken** | Committing the whole UI to transit-signage vernacular on a sodium-amber accent — the visual language of a city network at night, which is literally the game. |
 
 ### Deliberately NOT
@@ -67,15 +67,15 @@ Only on the board, the transport legend, and transport/ticket chips. Never UI ch
 | `--t-bus` | `#3E9B4F` | Bus (green) |
 | `--t-metro` | `#CE4B4B` | Metro (red) |
 
-### Tracker slot colours
-Five, each clearly separable from amber and from the three transport hues.
+### Detective slot colours
+Five, each clearly separable from amber and from the three transport hues. CSS vars keep the short `--tr-*` names.
 | Token | Hex | Slot |
 |---|---|---|
-| `--tr-1` | `#3E9BFF` | Tracker 1 — Azure |
-| `--tr-2` | `#8A7BFF` | Tracker 2 — Indigo |
-| `--tr-3` | `#C06BF0` | Tracker 3 — Violet |
-| `--tr-4` | `#EE5FA3` | Tracker 4 — Magenta |
-| `--tr-5` | `#28C2A8` | Tracker 5 — Teal |
+| `--tr-1` | `#3E9BFF` | Detective 1 — Azure |
+| `--tr-2` | `#8A7BFF` | Detective 2 — Indigo |
+| `--tr-3` | `#C06BF0` | Detective 3 — Violet |
+| `--tr-4` | `#EE5FA3` | Detective 4 — Magenta |
+| `--tr-5` | `#28C2A8` | Detective 5 — Teal |
 
 Vedha's own colour in the Lobby / when revealed = `--signal` (amber).
 
@@ -129,7 +129,7 @@ Near-none by design (over-animation reads as AI-generated).
 
 | Component | Notes |
 |---|---|
-| **Blade** | The signature. `<Blade colorVar="--tr-1" label="TRACKER 1" value="Azure" />` — 4px left colour bar, mono label, optional right value, `--surface` fill, `--r-sm`. |
+| **Blade** | The signature. `<Blade colorVar="--tr-1" label="DETECTIVE 1" value="Azure" />` — 4px left colour bar, mono label, optional right value, `--surface` fill, `--r-sm`. (Slot CSS vars stay named `--tr-*` internally.) |
 | **Button** | `primary` (amber fill, `--signal-ink` text) · `default` (`--surface-2` fill, `--line-strong` border) · `ghost` (no fill) · `danger` (rose text/border). One size 40px, `sm` 32px. Label = the exact action ("Create room", "Claim Vedha", "Ready"). |
 | **Segmented code input** | 6 mono cells, paste-aware, used for invite codes on Join. |
 | **Countdown ring** | SVG circle, `--signal` stroke on `--line` track, mono number centred. |
@@ -147,7 +147,7 @@ Near-none by design (over-animation reads as AI-generated).
 - Responsive to 360px width; left rail → bottom bar on mobile.
 - Visible keyboard focus on everything interactive (amber ring).
 - `prefers-reduced-motion` respected (diagram frozen, transition instant).
-- Colour is never the only signal: Tracker slots show number + colour + name; transport shows icon + colour; connection/ready show shape + colour.
+- Colour is never the only signal: Detective slots show number + colour + name; transport shows icon + colour; connection/ready show shape + colour.
 - Text contrast ≥ 4.5:1 for body on its background (`--text` on `--bg`/`--surface` passes; `--text-faint` is for non-essential only).
 - Copy: active voice, sentence case, an action keeps its name through the whole flow, errors say what happened + how to fix, empty states invite an action.
 

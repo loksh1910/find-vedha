@@ -55,7 +55,7 @@ A **design system doc** (`DESIGN_SYSTEM.md`) will be created during Phase 0 once
 |---|---|---|
 | Framework | **Next.js (App Router) + TypeScript** | App Router only, not Pages Router |
 | Styling | **Tailwind CSS + shadcn/ui** (Radix primitives) | Standard, well-supported |
-| Backend | **Supabase** — Postgres + Auth + Realtime + Row Level Security (one free account) | SQL for game state + stats; RLS is the key feature — it lets the DB physically withhold the Runner's position from Tracker clients |
+| Backend | **Supabase** — Postgres + Auth + Realtime + Row Level Security (one free account) | SQL for game state + stats; RLS is the key feature — it lets the DB physically withhold the Runner's position from Detective clients |
 | Auth | Supabase Auth — email/password + Google. Sign-up also collects **username + avatar** (preset avatars for MVP; upload later) | |
 | Realtime | Supabase Realtime — **one channel per room**: game state + presence + text chat | |
 | Video chat | **Daily.co** prebuilt call widget (free tier) | Simpler than Agora / raw WebRTC; key added later via env var |
@@ -68,8 +68,8 @@ A **design system doc** (`DESIGN_SYSTEM.md`) will be created during Phase 0 once
 
 - Product: **Find Vedha**.
 - The hidden/evading player: **Runner**; in-world character name **Vedha**.
-- The pursuing players: **Trackers** — they control **5 Tracker pawns** between them. *(Open question: the user once said "Chasers" in chat; the written brief uses "Trackers" throughout. Using "Trackers" until told otherwise — it's a global rename either way.)*
-- Tracker slot colors: **T1 Blue · T2 Orange · T3 Purple · T4 Pink · T5 Cyan.** Deliberately avoid yellow/green/red — those are reserved for transport lines. (Proposal; finalize in Phase 0.)
+- The pursuing players: **Detectives** — they control **5 Detective pawns** between them. (Settled term, per the user — it's the authentic Scotland Yard word. The brief said "Tracker"; the user briefly floated "Chaser". Do not reintroduce either.)
+- Detective slot colors: **D1 Blue · D2 Orange · D3 Purple · D4 Pink · D5 Cyan.** Deliberately avoid yellow/green/red — those are reserved for transport lines. CSS vars are `--tr-1`…`--tr-5` (kept short). (Proposal; finalize in Phase 0.)
 - Transport tiers: **Auto** = yellow lines · **Bus** = green lines · **Metro** = red lines.
 - **"Who is Vedha" is PUBLIC** from the lobby onward. **"Where Vedha is" is HIDDEN** during play except on reveal rounds. Never conflate the two.
 
@@ -85,26 +85,26 @@ A **design system doc** (`DESIGN_SYSTEM.md`) will be created during Phase 0 once
 | Rule | Value |
 |---|---|
 | Players per room | 2–6 |
-| Pawns | 1 Runner (Vedha) + 5 Tracker pawns. With <6 players, a player controls more than one Tracker pawn. |
+| Pawns | 1 Runner (Vedha) + 5 Detective pawns. With <6 players, a player controls more than one Detective pawn. |
 | Board nodes | exactly 199 |
-| Tracker tickets (per pawn) | **10 Auto · 8 Bus · 4 Metro** |
+| Detective tickets (per pawn) | **10 Auto · 8 Bus · 4 Metro** |
 | Runner tickets | **4 Auto · 3 Bus · 3 Metro · 5 Wildcard · 2 Double-Move** |
-| Wildcard | Usable on any transport type; **hides which transport type was used** from Trackers. (Destination is hidden every round anyway.) Also the **only** ticket that can cross a **river / black-line edge** — long Wildcard-only shortcut routes designed into the board (**in scope**; authored with the board graph in Phase 3). |
-| Double-Move | Runner makes **two consecutive moves** before Trackers respond. If a reveal round lands on the **first** of the two moves, the reveal happens after that first move. |
-| Start positions | Random draw from a fixed pool of **~20 designated start nodes** spread across the map. Runner + 5 Trackers all draw **distinct** nodes from that pool. |
+| Wildcard | Usable on any transport type; **hides which transport type was used** from Detectives. (Destination is hidden every round anyway.) Also the **only** ticket that can cross a **river / black-line edge** — long Wildcard-only shortcut routes designed into the board (**in scope**; authored with the board graph in Phase 3). |
+| Double-Move | Runner makes **two consecutive moves** before Detectives respond. If a reveal round lands on the **first** of the two moves, the reveal happens after that first move. |
+| Start positions | Random draw from a fixed pool of **~20 designated start nodes** spread across the map. Runner + 5 Detectives all draw **distinct** nodes from that pool. |
 | Rounds | **24** |
-| Reveal rounds | **3, 8, 13, 18, 24.** Vedha's exact node is shown to all Trackers, then hidden again as soon as Vedha's next move is made. |
-| Turn order | Runner moves first each round, then Trackers move **sequentially** (one at a time, each move visible to the others). |
+| Reveal rounds | **3, 8, 13, 18, 24.** Vedha's exact node is shown to all Detectives, then hidden again as soon as Vedha's next move is made. |
+| Turn order | Runner moves first each round, then Detectives move **sequentially** (one at a time, each move visible to the others). |
 | Movement | **One stop per ticket** — cannot skip a stop to a further one on the same route. **Every player must move each turn** — no passing/staying. |
-| Tracker blocking | A Tracker **cannot** move onto a node occupied by another Tracker. |
-| Catch | Any Tracker landing on Vedha's exact node → **Trackers win immediately.** Same if Vedha is forced onto an occupied Tracker node. |
-| Stuck Tracker | A Tracker with no usable ticket for any connection at its node is **stuck for the rest of the game** — still occupies/blocks that node, **auto-skipped** in turn rotation, visually marked "stuck". |
-| Runner win | Survives through the end of **round 24**, OR **every Tracker becomes stuck** before round 24 completes. |
-| Runner stuck (no legal move) | **Trackers win** — matches the official rule (a Mr. X who cannot move is captured). Rare in practice now that Vedha gains Trackers' spent tickets. |
-| Ticket handoff | **Implemented (real Scotland Yard rule).** When a Tracker spends an Auto / Bus / Metro ticket, that ticket is added to Vedha's wallet and Vedha may spend it on a later turn. Vedha's **Wildcard and Double-Move counts are never increased this way** (they stay at the fixed 5 / 2). Trackers never get tickets back — their wallets only shrink. |
+| Detective blocking | A Detective **cannot** move onto a node occupied by another Detective. |
+| Catch | Any Detective landing on Vedha's exact node → **Detectives win immediately.** Same if Vedha is forced onto an occupied Detective node. |
+| Stuck Detective | A Detective with no usable ticket for any connection at its node is **stuck for the rest of the game** — still occupies/blocks that node, **auto-skipped** in turn rotation, visually marked "stuck". |
+| Runner win | Survives through the end of **round 24**, OR **every Detective becomes stuck** before round 24 completes. |
+| Runner stuck (no legal move) | **Detectives win** — matches the official rule (a Mr. X who cannot move is captured). Rare in practice now that Vedha gains Detectives' spent tickets. |
+| Ticket handoff | **Implemented (real Scotland Yard rule).** When a Detective spends an Auto / Bus / Metro ticket, that ticket is added to Vedha's wallet and Vedha may spend it on a later turn. Vedha's **Wildcard and Double-Move counts are never increased this way** (they stay at the fixed 5 / 2). Detectives never get tickets back — their wallets only shrink. |
 
 ### Hidden-info enforcement (non-negotiable)
-The Runner's real position must be **server-authoritative** and never sent to Tracker clients except on reveal rounds / at game end — enforce with Supabase Row Level Security, not just client-side hiding, or it's inspectable via browser dev-tools. Move validation, catch detection, turn/round progression, and win/lose resolution are all validated database-side.
+The Runner's real position must be **server-authoritative** and never sent to Detective clients except on reveal rounds / at game end — enforce with Supabase Row Level Security, not just client-side hiding, or it's inspectable via browser dev-tools. Move validation, catch detection, turn/round progression, and win/lose resolution are all validated database-side.
 
 ---
 
@@ -119,7 +119,7 @@ The Runner's real position must be **server-authoritative** and never sent to Tr
 - Lobby → game **transition animation** (transient, not a route)
 
 **Design now, build later:**
-- `/room/[code]/play` — In-Game (Runner view vs Tracker view; board, HUD, color-coded ticket panel, move log, reveal-round state, stuck-pawn state, video tiles, text chat, non-functional screen-share button)
+- `/room/[code]/play` — In-Game (Runner view vs Detective view; board, HUD, color-coded ticket panel, move log, reveal-round state, stuck-pawn state, video tiles, text chat, non-functional screen-share button)
 - `/room/[code]/results` — outcome, full reveal of Vedha's route, stat deltas, Rematch / Return to dashboard
 - `/u/[username]` Profile · `/game/[gameId]` Match Detail/Replay · `/friends` · `/settings`
 - Global: top nav, toast system, per-panel skeletons, empty/error states, 404/500, offline banner, confirm dialogs, presence dots, host migration
@@ -133,8 +133,8 @@ The Runner's real position must be **server-authoritative** and never sent to Tr
 Single screen, five phases:
 
 - **Phase A — Open roster.** Players join; list updates live. **Host-only controls (this phase only):** kick player, toggle AI-fill, adjust max players (2–6). Host CTA: **"Lock roster & start role selection"** (≥2 players). *(That the host triggers this is an assumption — pending user confirmation.)*
-- **Phase B — Role selection (10 seconds, PUBLIC).** Prominent 10-second countdown for everyone. One **Vedha** slot + five color-tagged **Tracker** slots. Any player may claim the Vedha slot or a specific Tracker slot; claims are visible to all and lock to others; a player may release and re-pick within the 10s. With <6 players, a player may hold more than one slot.
-- **Phase C — Roles locked / auto-fill.** On timer expiry the platform **randomly assigns all unclaimed slots** to players with room — **including randomly choosing Vedha if nobody claimed it** — distributing multiple Tracker slots as needed so all 5 are owned. Lobby then shows a clear public assignment ("Vedha: <player>", each Tracker color → its player).
+- **Phase B — Role selection (10 seconds, PUBLIC).** Prominent 10-second countdown for everyone. One **Vedha** slot + five color-tagged **Detective** slots. Any player may claim the Vedha slot or a specific Detective slot; claims are visible to all and lock to others; a player may release and re-pick within the 10s. With <6 players, a player may hold more than one slot.
+- **Phase C — Roles locked / auto-fill.** On timer expiry the platform **randomly assigns all unclaimed slots** to players with room — **including randomly choosing Vedha if nobody claimed it** — distributing multiple Detective slots as needed so all 5 are owned. Lobby then shows a clear public assignment ("Vedha: <player>", each Detective color → its player).
 - **Phase D — Ready-up.** Each player gets a **Ready toggle**. Host may still `Close room`; **max-players / kick / AI-fill are now locked**.
 - **Phase E — Auto-start.** When **all** players are Ready, a **5-second countdown** auto-starts (cancels if anyone un-readies or disconnects). At zero → the Lobby→game transition animation → board view.
 
@@ -165,7 +165,7 @@ Edge cases: player leaves during B/C (slot re-opens / re-fills; below 2 players 
 
 ## Non-goals (do not build unless the user asks)
 
-- **AI bot Trackers** — v2 feature. The "Fill empty Tracker slots with AI?" toggle exists in the UI but is **disabled / "Coming soon"** for MVP. Unclaimed slots go to human players (one player can hold several).
+- **AI bot Detectives** — v2 feature. The "Fill empty Detective slots with AI?" toggle exists in the UI but is **disabled / "Coming soon"** for MVP. Unclaimed slots go to human players (one player can hold several).
 - **Public matchmaking / lobbies** — invite-code only, friends-only.
 - **Functional screen-share** — the button is **UI only** for the demo.
 - **Avatar upload** — preset avatars only for MVP.
@@ -193,12 +193,11 @@ Run **both** `npm run build` and `npm run lint` before considering a change done
 
 ## Open questions (pending user answers — resolve before or during Phase 0)
 
-1. **"Trackers" vs "Chasers"** — which term for the pursuing players / their pawns? (Brief says "Trackers"; user once said "Chasers".)
-2. **What triggers the 10-second role-selection timer?** Assumption: host presses "Lock roster & start role selection".
-3. **Avatars** — preset set only for MVP? (Assumed yes.)
-4. In-game build: brief Phase 1 says "two players on one screen" — accepted as a dev convenience; true Runner/Tracker screen separation comes with Phase 2 networking.
+1. **What triggers the 10-second role-selection timer?** Assumption: host presses "Lock roster & start role selection".
+2. **Avatars** — preset set only for MVP? (Assumed yes.)
+3. In-game build: brief Phase 1 says "two players on one screen" — accepted as a dev convenience; true Runner/Detective screen separation comes with Phase 2 networking.
 
-**Resolved:** Runner-with-no-legal-move → Trackers win (matches official rule). River / Wildcard-only shortcut edges → **in scope**. Ticket handoff (Trackers' spent tickets → Vedha) → **in scope**.
+**Resolved:** Pursuers are called **Detectives** (not "Tracker"/"Chaser"). Runner-with-no-legal-move → Detectives win (matches official rule). River / Wildcard-only shortcut edges → **in scope**. Ticket handoff (Detectives' spent tickets → Vedha) → **in scope**.
 
 ---
 

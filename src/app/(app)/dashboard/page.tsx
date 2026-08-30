@@ -156,7 +156,7 @@ export default function DashboardPage() {
               <Stat label="Played" value={MOCK_STATS.played} />
               <Stat label="Win rate" value={`${MOCK_STATS.winRatePct}%`} />
               <Stat label="As Vedha" value={`${MOCK_STATS.asVedhaPct}%`} />
-              <Stat label="As Tracker" value={`${MOCK_STATS.asTrackerPct}%`} />
+              <Stat label="As Detective" value={`${MOCK_STATS.asDetectivePct}%`} />
             </div>
           </section>
         </aside>

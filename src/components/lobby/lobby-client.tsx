@@ -320,7 +320,7 @@ export function LobbyClient({ code }: { code: string }) {
               </p>
               <h1 className="mt-1 font-display text-xl font-extrabold tracking-tight text-text">
                 {phase === "roster" && "Waiting for the host to start"}
-                {phase === "selecting" && "Pick Vedha or a Tracker"}
+                {phase === "selecting" && "Pick Vedha or a Detective"}
                 {phase === "locked" && "Here's who's who"}
                 {phase === "ready" && "Mark ready when you are"}
                 {phase === "countdown" && "Everyone's ready"}
@@ -497,7 +497,7 @@ export function LobbyClient({ code }: { code: string }) {
               </button>
             </div>
             <div className="flex items-center gap-2 opacity-60">
-              <span className="text-sm text-muted">AI Trackers</span>
+              <span className="text-sm text-muted">AI Detectives</span>
               <Switch checked={false} disabled aria-label="Fill empty slots with AI (coming soon)" />
               <span className="font-mono text-[0.625rem] uppercase text-faint">soon</span>
             </div>

@@ -4,7 +4,7 @@ import { cn } from "@/lib/cn";
 /**
  * The signature component: a destination-blade.
  * A 4px colour bar on the left edge, a mono label, an optional value on the right.
- * Used for the transport legend, Tracker slot tags, section eyebrows, the invite code.
+ * Used for the transport legend, Detective slot tags, section eyebrows, the invite code.
  */
 export function Blade({
   colorVar,

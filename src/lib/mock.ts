@@ -8,7 +8,7 @@ export type Friend = {
 
 export type RecentGame = {
   date: string;
-  role: "Vedha" | "Tracker";
+  role: "Vedha" | "Detective";
   result: "Won" | "Lost";
   players: number;
   rounds: number;
@@ -28,17 +28,17 @@ export const MOCK_STATS = {
   played: 41,
   winRatePct: 56,
   asVedhaPct: 61,
-  asTrackerPct: 52,
+  asDetectivePct: 52,
   streak: 3,
   tier: "Signal II",
 } as const;
 
 export const MOCK_RECENT_GAMES: RecentGame[] = [
   { date: "Aug 29", role: "Vedha", result: "Won", players: 6, rounds: 24 },
-  { date: "Aug 27", role: "Tracker", result: "Won", players: 5, rounds: 19 },
-  { date: "Aug 27", role: "Tracker", result: "Lost", players: 6, rounds: 24 },
+  { date: "Aug 27", role: "Detective", result: "Won", players: 5, rounds: 19 },
+  { date: "Aug 27", role: "Detective", result: "Lost", players: 6, rounds: 24 },
   { date: "Aug 24", role: "Vedha", result: "Lost", players: 4, rounds: 12 },
-  { date: "Aug 22", role: "Tracker", result: "Won", players: 6, rounds: 21 },
+  { date: "Aug 22", role: "Detective", result: "Won", players: 6, rounds: 21 },
 ];
 
 /* --- Lobby bots ------------------------------------------------------ */

@@ -45,8 +45,8 @@ export function ManualContent() {
       <Section title="The idea">
         <p>
           One player is <b>Vedha</b>, hidden somewhere on the Chennai map. Everyone
-          else runs the <b>Trackers</b> — five pawns trying to land on Vedha&apos;s
-          exact stop before <b>round 24</b>.
+          else runs the <b>Detectives</b> — five pawns trying to land on
+          Vedha&apos;s exact stop before <b>round 24</b>.
         </p>
         <p>
           Everyone knows <i>who</i> Vedha is. Nobody except Vedha knows <i>where</i>{" "}
@@ -73,27 +73,28 @@ export function ManualContent() {
 
       <Section title="Tickets to start">
         <p>
-          <b>Each Tracker pawn:</b> 10 Auto · 8 Bus · 4 Metro.
+          <b>Each Detective pawn:</b> 10 Auto · 8 Bus · 4 Metro.
         </p>
         <p>
           <b>Vedha:</b> 4 Auto · 3 Bus · 3 Metro · 5 Wildcard · 2 Double-Move.
         </p>
         <p>
           <b>Wildcard</b> — works on any line, hides which line was used from the
-          Trackers, and is the only way across a river crossing. <b>Double-Move</b>{" "}
-          — take two stops in a row before the Trackers respond.
+          Detectives, and is the only way across a river crossing.{" "}
+          <b>Double-Move</b> — take two stops in a row before the Detectives
+          respond.
         </p>
         <p>
-          Every ticket a Tracker spends is handed to Vedha — so Vedha&apos;s Auto,
-          Bus and Metro supply grows as the game goes on. (Wildcards and
+          Every ticket a Detective spends is handed to Vedha — so Vedha&apos;s
+          Auto, Bus and Metro supply grows as the game goes on. (Wildcards and
           Double-Moves are not.)
         </p>
       </Section>
 
       <Section title="Hidden movement & reveals">
         <p>
-          Vedha&apos;s stop is never shown. After each Vedha move the Trackers see
-          only the transport type used (or nothing, on a Wildcard).
+          Vedha&apos;s stop is never shown. After each Vedha move the Detectives
+          see only the transport type used (or nothing, on a Wildcard).
         </p>
         <p>
           On rounds <b>3, 8, 13, 18 and 24</b> Vedha&apos;s exact stop is shown to
@@ -103,20 +104,21 @@ export function ManualContent() {
 
       <Section title="Turns">
         <p>
-          Vedha moves first each round, then the Trackers move one at a time. A
-          Tracker can&apos;t move onto a stop another Tracker is on. A Tracker with
-          no usable ticket is <b>stuck</b> for the rest of the game and is skipped.
+          Vedha moves first each round, then the Detectives move one at a time. A
+          Detective can&apos;t move onto a stop another Detective is on. A
+          Detective with no usable ticket is <b>stuck</b> for the rest of the game
+          and is skipped.
         </p>
       </Section>
 
       <Section title="Winning">
         <p>
-          <b>Trackers win</b> the moment any Tracker lands on Vedha&apos;s exact
-          stop.
+          <b>Detectives win</b> the moment any Detective lands on Vedha&apos;s
+          exact stop.
         </p>
         <p>
-          <b>Vedha wins</b> by surviving through round 24 — or if every Tracker gets
-          stuck first.
+          <b>Vedha wins</b> by surviving through round 24 — or if every Detective
+          gets stuck first.
         </p>
       </Section>
     </div>
