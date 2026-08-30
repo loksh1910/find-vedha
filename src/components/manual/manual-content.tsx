@@ -65,6 +65,10 @@ export function ManualContent() {
           <Ticket colorVar="--t-bus" icon={<Bus size={15} />} name="Bus" detail="green lines" />
           <Ticket colorVar="--t-metro" icon={<TrainFront size={15} />} name="Metro" detail="red lines" />
         </div>
+        <p>
+          A few long <b>river crossings</b> (dashed lines) connect distant stops —
+          only Vedha can take them, and only with a Wildcard.
+        </p>
       </Section>
 
       <Section title="Tickets to start">
@@ -75,9 +79,14 @@ export function ManualContent() {
           <b>Vedha:</b> 4 Auto · 3 Bus · 3 Metro · 5 Wildcard · 2 Double-Move.
         </p>
         <p>
-          <b>Wildcard</b> — works on any line and hides which line was used from the
-          Trackers. <b>Double-Move</b> — take two stops in a row before the Trackers
-          respond.
+          <b>Wildcard</b> — works on any line, hides which line was used from the
+          Trackers, and is the only way across a river crossing. <b>Double-Move</b>{" "}
+          — take two stops in a row before the Trackers respond.
+        </p>
+        <p>
+          Every ticket a Tracker spends is handed to Vedha — so Vedha&apos;s Auto,
+          Bus and Metro supply grows as the game goes on. (Wildcards and
+          Double-Moves are not.)
         </p>
       </Section>
 

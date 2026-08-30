@@ -76,6 +76,7 @@ A **design system doc** (`DESIGN_SYSTEM.md`) will be created during Phase 0 once
 ### Board
 - Exactly **199 numbered nodes**. **No named landmark stations** — deliberate deviation from the brief's §3 boilerplate, per the user's explicit instruction ("just nodes and a neat map bg"). Background art should *read* as Chennai (east-edge coastline = Bay of Bengal, two abstract river curves) with **no labels and no gameplay effect**.
 - A node's available transports = **whichever colored edges touch it**. Do not store a separate "allowed transport" field per node. When the board graph is built (Phase 3), follow the density pattern: Auto everywhere (dense, short hops), Bus at busier nodes, Metro only at major hubs; **no node has Bus or Metro without also having Auto**.
+- The graph also carries a few **river / black-line edges** — long shortcut connections, `transport: "river"` (Wildcard-only), roughly following the two Chennai river curves. Author ~2–4 of them in Phase 3.
 
 ---
 
@@ -88,7 +89,7 @@ A **design system doc** (`DESIGN_SYSTEM.md`) will be created during Phase 0 once
 | Board nodes | exactly 199 |
 | Tracker tickets (per pawn) | **10 Auto · 8 Bus · 4 Metro** |
 | Runner tickets | **4 Auto · 3 Bus · 3 Metro · 5 Wildcard · 2 Double-Move** |
-| Wildcard | Usable on any transport type; **hides which transport type was used** from Trackers. (Destination is hidden every round anyway.) Also the only ticket allowed on river/shortcut edges — *those edges are NOT in the MVP (assumption, pending confirmation).* |
+| Wildcard | Usable on any transport type; **hides which transport type was used** from Trackers. (Destination is hidden every round anyway.) Also the **only** ticket that can cross a **river / black-line edge** — long Wildcard-only shortcut routes designed into the board (**in scope**; authored with the board graph in Phase 3). |
 | Double-Move | Runner makes **two consecutive moves** before Trackers respond. If a reveal round lands on the **first** of the two moves, the reveal happens after that first move. |
 | Start positions | Random draw from a fixed pool of **~20 designated start nodes** spread across the map. Runner + 5 Trackers all draw **distinct** nodes from that pool. |
 | Rounds | **24** |
@@ -99,8 +100,8 @@ A **design system doc** (`DESIGN_SYSTEM.md`) will be created during Phase 0 once
 | Catch | Any Tracker landing on Vedha's exact node → **Trackers win immediately.** Same if Vedha is forced onto an occupied Tracker node. |
 | Stuck Tracker | A Tracker with no usable ticket for any connection at its node is **stuck for the rest of the game** — still occupies/blocks that node, **auto-skipped** in turn rotation, visually marked "stuck". |
 | Runner win | Survives through the end of **round 24**, OR **every Tracker becomes stuck** before round 24 completes. |
-| Runner stuck (no legal move) | **Trackers win.** *(Assumption — pending user confirmation.)* |
-| Ticket handoff | **NOT implemented.** Trackers' spent tickets do **not** transfer to Vedha. (That's a physical-bookkeeping quirk of the board game, not a real rule.) |
+| Runner stuck (no legal move) | **Trackers win** — matches the official rule (a Mr. X who cannot move is captured). Rare in practice now that Vedha gains Trackers' spent tickets. |
+| Ticket handoff | **Implemented (real Scotland Yard rule).** When a Tracker spends an Auto / Bus / Metro ticket, that ticket is added to Vedha's wallet and Vedha may spend it on a later turn. Vedha's **Wildcard and Double-Move counts are never increased this way** (they stay at the fixed 5 / 2). Trackers never get tickets back — their wallets only shrink. |
 
 ### Hidden-info enforcement (non-negotiable)
 The Runner's real position must be **server-authoritative** and never sent to Tracker clients except on reveal rounds / at game end — enforce with Supabase Row Level Security, not just client-side hiding, or it's inspectable via browser dev-tools. Move validation, catch detection, turn/round progression, and win/lose resolution are all validated database-side.
@@ -151,7 +152,7 @@ Edge cases: player leaves during B/C (slot re-opens / re-fills; below 2 players 
 | **0** | Per-screen layout design, user-driven. Order: Landing → Manual → Auth → Dashboard → Create Room → Join → Lobby → Transition. Ask the user for each layout; confirm before building. |
 | **1** | Build front-of-house UI (Landing → Lobby → transition) on **mocked local state** first. |
 | **2** | Wire Supabase: auth (username/avatar), rooms, invite codes, Lobby realtime (roster, 10s claim timer, auto-fill, ready-up, 5s countdown), host controls. |
-| **3** | Board data: the full **199-node Chennai graph** (ids, x/y coords, edges with transport type, ~20 start-node flags) as JSON. Its own review checkpoint before any game logic. |
+| **3** | Board data: the full **199-node Chennai graph** (ids, x/y coords, edges with transport type incl. ~2–4 Wildcard-only river edges, ~20 start-node flags) as JSON. Its own review checkpoint before any game logic. |
 | **4** | In-game engine (local): board renders from data, movement + ticket logic, hidden-Runner logic, reveal rounds, win/loss detection, end-game screen. |
 | **5** | Realtime sync of in-game moves across tabs/devices. |
 | **6** | Social layer: video chat (Daily.co), text chat. |
@@ -168,7 +169,6 @@ Edge cases: player leaves during B/C (slot re-opens / re-fills; below 2 players 
 - **Public matchmaking / lobbies** — invite-code only, friends-only.
 - **Functional screen-share** — the button is **UI only** for the demo.
 - **Avatar upload** — preset avatars only for MVP.
-- **River / Wildcard-only shortcut edges** on the board — not in MVP (assumption).
 - **Deploying anywhere.** See below.
 
 ---
@@ -195,10 +195,10 @@ Run **both** `npm run build` and `npm run lint` before considering a change done
 
 1. **"Trackers" vs "Chasers"** — which term for the pursuing players / their pawns? (Brief says "Trackers"; user once said "Chasers".)
 2. **What triggers the 10-second role-selection timer?** Assumption: host presses "Lock roster & start role selection".
-3. **Runner with no legal move** → Trackers win? (Assumed yes.)
-4. **River / Wildcard-only shortcut edges** — confirm out of scope for MVP.
-5. **Avatars** — preset set only for MVP? (Assumed yes.)
-6. In-game build: brief Phase 1 says "two players on one screen" — accepted as a dev convenience; true Runner/Tracker screen separation comes with Phase 2 networking.
+3. **Avatars** — preset set only for MVP? (Assumed yes.)
+4. In-game build: brief Phase 1 says "two players on one screen" — accepted as a dev convenience; true Runner/Tracker screen separation comes with Phase 2 networking.
+
+**Resolved:** Runner-with-no-legal-move → Trackers win (matches official rule). River / Wildcard-only shortcut edges → **in scope**. Ticket handoff (Trackers' spent tickets → Vedha) → **in scope**.
 
 ---
 

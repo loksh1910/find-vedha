@@ -30,7 +30,7 @@
 | Transport layering | Auto at every node (base). Bus only at busier nodes. Metro only at major hubs. No node has Bus or Metro without Auto. A node's available transports = whichever colored edges touch it (no separate field). |
 | Tracker tickets (per pawn) | 10 Auto · 8 Bus · 4 Metro |
 | Runner tickets | 4 Auto · 3 Bus · 3 Metro · 5 Wildcard · 2 Double-Move |
-| Wildcard | Any transport type; **hides which transport type was used** from Trackers (destination is hidden anyway). |
+| Wildcard | Any transport type; **hides which transport type was used** from Trackers (destination is hidden anyway). Also the **only** ticket that can cross a **river / black-line edge** (Wildcard-only shortcut routes — see below). |
 | Double-Move | Two consecutive Runner moves before Trackers respond. If a reveal round lands on the first move, reveal happens after that first move. |
 | Start positions | Random draw from a fixed pool of ~20 designated start nodes, spread across the map. Runner + 5 Trackers all draw **distinct** nodes from the same pool. |
 | Rounds | 24 |
@@ -41,9 +41,9 @@
 | Catch | Any Tracker moving onto Vedha's exact node → **Trackers win immediately.** Same if Vedha is forced onto an occupied Tracker node. |
 | Stuck Tracker | No usable ticket for any connection → stuck for the rest of the game; still blocks its node, **auto-skipped in turn rotation**, marked "stuck". |
 | Runner win | Survives to the end of round 24, **or** every Tracker becomes stuck before round 24 ends. |
-| Runner stuck (no legal move) | **ASSUMPTION → Trackers win.** Flag if you disagree. |
-| Ticket handoff | NOT implemented — Trackers' spent tickets do not go to Vedha. |
-| River / Wildcard-only shortcut routes | **ASSUMPTION → not in MVP.** Can add later as Wildcard-only edges. |
+| Runner stuck (no legal move) | **Trackers win** (matches the official rule). Rare now that Vedha gains Trackers' spent tickets. |
+| Ticket handoff | **In scope (real rule).** When a Tracker spends an Auto/Bus/Metro ticket it is added to Vedha's wallet and Vedha may spend it later. Vedha's Wildcard / Double-Move counts never increase this way. Trackers never get tickets back. |
+| River / Wildcard-only shortcut routes | **In scope.** ~2–4 long `transport: "river"` edges, roughly along the two river curves, crossable only with a Wildcard. Authored with the board graph in Phase 3. |
 
 ### 0.3 Tech stack
 | Layer | Choice | Notes |
@@ -69,10 +69,10 @@
 ### 0.5 Open questions
 1. **"Trackers" vs "Chasers"** — brief §3.5 uses "Tracker" consistently (incl. "Tracker 1 = blue"); you said "Chaser" in chat. Pick one — it's a global find/replace.
 2. **What triggers the 10-second role-claim timer?** Brief doesn't say. **ASSUMPTION:** host presses **"Lock roster & start role selection"** (available while the lobby is still open); that starts the shared 10s countdown for everyone. Confirm or change.
-3. **Runner-with-no-legal-move** → Trackers win (§0.2). Confirm.
-4. **River / Wildcard-only shortcut routes** → not in MVP (§0.2). Confirm.
-5. **Avatars** → pick from a preset set for MVP, upload later. Confirm.
-6. When we build in-game: brief Phase 1 says "two players on one screen" for the local engine — that's a dev convenience; true Runner/Tracker screen separation arrives with Phase 2 networking. OK?
+3. **Avatars** → pick from a preset set for MVP, upload later. Confirm.
+4. When we build in-game: brief Phase 1 says "two players on one screen" for the local engine — that's a dev convenience; true Runner/Tracker screen separation arrives with Phase 2 networking. OK?
+
+**Resolved:** Runner-with-no-legal-move → Trackers win (official rule). Ticket handoff and river/Wildcard-only shortcut routes → **both in scope** (§0.2).
 
 ---
 
@@ -155,7 +155,7 @@ Each screen: **Route** · **Purpose** · **Layout regions** · **Every element**
 ### A2. Manual / How to Play  *(build now — page + reusable modal)*
 - **Route:** `/how-to-play` (standalone page) — **and** the same content as a `<ManualDialog>` modal/side-panel reused from the Landing nav and the Lobby "Manual" button.
 - **Purpose:** Complete rules reference without leaving the current screen.
-- **Contents:** objective · roles (Vedha vs Trackers) · the board & transport tiers (Auto/Bus/Metro + color key) · ticket counts (both roles) · Wildcard & Double-Move explained · turn order · hidden movement · reveal rounds (3/8/13/18/24) · catching Vedha · stuck Trackers · win conditions · a worked example turn.
+- **Contents:** objective · roles (Vedha vs Trackers) · the board & transport tiers (Auto/Bus/Metro + color key) · river / Wildcard-only crossings · ticket counts (both roles) · Wildcard & Double-Move explained · **ticket handoff** (every ticket a Tracker spends goes to Vedha) · turn order · hidden movement · reveal rounds (3/8/13/18/24) · catching Vedha · stuck Trackers · win conditions · a worked example turn.
 - **States:** page view · modal view (scroll-locked body, close button, ESC to close) · section anchor links.
 - **Enters from:** Landing nav, Lobby "Manual" button, footer.
 - **Exits to:** back to wherever it was opened.
@@ -290,10 +290,10 @@ Each screen: **Route** · **Purpose** · **Layout regions** · **Every element**
 ### H. In-Game screen  *(design now — BUILD LATER)*
 - **Route:** `/room/[code]/play`
 - **Purpose:** Play the hidden-chase game. One shared layout; a **Runner view** and a **Tracker view** differ in what board info they expose.
-- **Board canvas:** 199 nodes on the Chennai background · edges yellow (Auto) / green (Bus) / red (Metro), a node's touching colors = its transports · pan (drag) + zoom (wheel / pinch), min/max, smooth transitions · Tracker pawns always visible to all (color + number) · **Vedha pawn visible only in the Runner view**; in the Tracker view it appears only on reveal rounds and at game end · on your turn, reachable nodes (you hold a matching ticket) highlight; node hover/focus states.
+- **Board canvas:** 199 nodes on the Chennai background · edges yellow (Auto) / green (Bus) / red (Metro) + a few dashed **river / black-line** edges (Wildcard-only), a node's touching colors = its transports · pan (drag) + zoom (wheel / pinch), min/max, smooth transitions · Tracker pawns always visible to all (color + number) · **Vedha pawn visible only in the Runner view**; in the Tracker view it appears only on reveal rounds and at game end · on your turn, reachable nodes (you hold a matching ticket) highlight; node hover/focus states.
 - **HUD (top):** `Round X / 24` · whose turn (`Vedha's move` / `Tracker 3 (Purple)` / `Your move`) · **who is Vedha** (public, e.g. "Vedha: Arjun") · next-reveal indicator (`Next reveal: round 8`) · big `REVEAL` banner on 3/8/13/18/24 · turn timer countdown ring (polish).
-- **Ticket panel:** the current viewer's wallet, counts + icons, **color-coded to the player/slot**. Runner also shows Wildcard + Double-Move. Tracker view shows each of your pawns' wallets.
-- **Move flow:** pick a highlighted node → if multiple transports connect, choose Auto/Bus/Metro → Runner only: optionally spend a **Wildcard** (hides transport type) or start a **Double-Move** (repeat for the 2nd move) → `Confirm`. Illegal picks: inline feedback ("No Bus ticket", "Occupied by a Tracker").
+- **Ticket panel:** the current viewer's wallet, counts + icons, **color-coded to the player/slot**. Runner also shows Wildcard + Double-Move — and Vedha's Auto/Bus/Metro counts **tick up over the game** as Trackers spend tickets (ticket handoff); a small "+1 from a Tracker" cue when it happens.
+- **Move flow:** pick a highlighted node → if multiple transports connect, choose Auto/Bus/Metro (or a **river edge** → Wildcard is forced) → Runner only: optionally spend a **Wildcard** (hides transport type) or start a **Double-Move** (repeat for the 2nd move) → `Confirm`. Illegal picks: inline feedback ("No Bus ticket", "Occupied by a Tracker", "River crossings need a Wildcard").
 - **Move history / travel log (side panel):**
   - Runner view: each round's transport icon **and the node numbers Vedha visited** (own breadcrumb) + Double-Move / Wildcard markers.
   - Tracker view: each round's transport icon only (or "Wildcard — unknown") + pinned Vedha positions from past reveal rounds. No node numbers for hidden rounds.
@@ -394,7 +394,7 @@ Each screen: **Route** · **Purpose** · **Layout regions** · **Every element**
 ## 5. Realtime & authority model (summary — full design when we build in-game)
 
 - **Server-authoritative (Supabase; never sent to the wrong client):** Vedha's current node — readable by Vedha's own client always; by Tracker clients only on a reveal round or at game end (enforced by Row Level Security). Also: the start-node draw, ticket wallets, move validation, catch detection, round/turn progression, win/lose resolution — validated database-side so a tampered client can't move illegally or read hidden data.
-- **Broadcast to everyone:** round number · whose turn · each Tracker's position + wallet · the transport type Vedha used each round (unless Wildcard → "unknown") · reveal-round Vedha position · **who is Vedha** (public) · chat · presence.
+- **Broadcast to everyone:** round number · whose turn · each Tracker's position + wallet · Vedha's Auto/Bus/Metro wallet counts (they grow via ticket handoff; Wildcard / Double-Move counts stay hidden) · the transport type Vedha used each round (unless Wildcard → "unknown") · reveal-round Vedha position · **who is Vedha** (public) · chat · presence.
 - **Channels:** one Supabase Realtime channel per room (game state + presence + text chat). Video is a separate Daily.co room keyed to the room code.
 
 ---
@@ -407,7 +407,7 @@ Each screen: **Route** · **Purpose** · **Layout regions** · **Every element**
 | 0 | Per-screen layout design — you describe each screen's layout, I present it back for approval before coding. Order: Landing → Manual → Auth → Dashboard → Create Room → Join → Lobby → Transition. | next |
 | 1 | Build front-of-house UI (Landing → Lobby → Transition), initially on mocked local state | after Phase 0 |
 | 2 | Wire Supabase: auth (username/avatar), rooms, invite codes, Lobby realtime (roster, claim timer, auto-fill, ready-up, countdown), host controls | — |
-| 3 | Board data: full 199-node Chennai graph (coords, edges by transport density, ~20 start nodes) as JSON — its own review checkpoint | — |
+| 3 | Board data: full 199-node Chennai graph (coords, edges by transport density, ~2–4 Wildcard-only river edges, ~20 start nodes) as JSON — its own review checkpoint | — |
 | 4 | In-game engine: board rendering, movement, tickets, hidden Runner, reveals, win/lose | — |
 | 5 | Realtime sync of in-game moves across devices | — |
 | 6 | Social: video chat, text chat | — |
