@@ -120,6 +120,7 @@ The Runner's real position must be **server-authoritative** and never sent to De
 
 **Design now, build later:**
 - `/room/[code]/play` — In-Game (Vedha view vs Detective view; board, HUD with always-available Manual + Leave, colour-coded ticket panel, 24-round travel log, reveal-round state, stuck-pawn state, shared voice, public + detectives-only chat tabs). No turn timer, no deduction assist, no screen-share.
+  - **Disconnects:** a Detective drop is non-blocking (pawn greys, turn auto-skipped, resumes on rejoin). A **Vedha drop pauses the game** — remaining players see a blocking `Vedha has disconnected · Waiting for them to return…` overlay with an **`Exit game`** CTA; clicking it ends the game → **Detectives win**. No auto-timeout; Vedha reconnecting clears it. `Leave game` by Vedha = instant Detectives win; by a Detective = that pawn is stuck.
 - `/room/[code]/results` — outcome, full reveal of Vedha's route, stat deltas, Rematch / Return to dashboard
 - `/u/[username]` Profile · `/game/[gameId]` Match Detail/Replay · `/friends` · `/settings`
 - Global: top nav, toast system, per-panel skeletons, empty/error states, 404/500, offline banner, confirm dialogs, presence dots, host migration

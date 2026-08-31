@@ -308,15 +308,19 @@ Each screen: **Route** · **Purpose** · **Layout regions** · **Every element**
     - **Public** — Vedha and all Detectives can type and read.
     - **Detectives only** — Detectives only; where they discuss anything they want kept from Vedha.
     - Vedha's client only has the Public tab.
-- **Sub-states:** your turn / not your turn · **reveal-round moment** (Vedha pin drops for all with a pulse; stays until Vedha's next move, then re-hides for Detectives; for Vedha, an "exposed" cue) · **Double-Move in progress** ("Vedha used a Double-Move") · **Wildcard used** ("transport unknown") · **Detective stuck** (pawn greyed, "no usable tickets", dropped from the turn queue, still blocks its node) · **waiting for opponent** · **player disconnected mid-game** (banner + grace timer → reconnect, else a Detective pawn is auto-skipped; Vedha disconnect handling TBD) · **illegal move feedback**.
+- **Sub-states:** your turn / not your turn · **reveal-round moment** (Vedha pin drops for all with a pulse; stays until Vedha's next move, then re-hides for Detectives; for Vedha, an "exposed" cue) · **Double-Move in progress** ("Vedha used a Double-Move") · **Wildcard used** ("transport unknown") · **Detective stuck** (pawn greyed, "no usable tickets", dropped from the turn queue, still blocks its node) · **waiting for opponent** · **illegal move feedback**.
+- **Disconnects:**
+  - **A Detective disconnects** — non-blocking banner (`D3 lost connection`), their pawn greys; the game continues, and their turn is auto-skipped until they rejoin (they resume control on reconnect).
+  - **Vedha disconnects** — the game **pauses** (Vedha moves first each round, so it can't proceed). The remaining players get a **blocking overlay**: heading `Vedha has disconnected`, message `Waiting for them to return…`, an elapsed indicator, and a single **`Exit game`** CTA. No auto-timeout — it waits indefinitely. If Vedha **reconnects**, the overlay clears and play resumes from Vedha's turn. If a player clicks **`Exit game`**, the game ends immediately → **Detectives win** ("Vedha left the game"). *(Open: can any remaining player click Exit, or host only? Default: any player.)*
+  - **`Leave game`** in the HUD is a deliberate quit (forfeit-confirm). If **Vedha** leaves, the game ends at once → Detectives win. If a **Detective** leaves, their pawn is treated as stuck for the rest of the game.
 - **Enters from:** transition.
-- **Exits to:** `/room/[code]/results` on catch / escape / all-Detectives-stuck.
+- **Exits to:** `/room/[code]/results` on catch / escape / all-Detectives-stuck / Vedha leaving or not returning.
 
 ---
 
 ### I. Results / End of Game  *(design now — build later)*
 - **Route:** `/room/[code]/results`
-- **Elements:** outcome banner — "Detectives win — Vedha caught at #NN on round R" / "Vedha escapes! Survived all 24 rounds" / "Vedha wins — every Detective is stuck" · **full reveal of Vedha's entire movement history** drawn on the board (optional animated replay — polish) · per-player summary (role, moves, tickets used, closest call / nearest miss) · stat deltas (win/loss recorded, rating/tier change) · actions: `Rematch` (same players back to Lobby, roles re-open) · `Return to dashboard` · `Share result` (later).
+- **Elements:** outcome banner — "Detectives win — Vedha caught at #NN on round R" / "Vedha escapes! Survived all 24 rounds" / "Vedha wins — every Detective is stuck" / "Detectives win — Vedha left the game" · **full reveal of Vedha's entire movement history** drawn on the board (optional animated replay — polish) · per-player summary (role, moves, tickets used, closest call / nearest miss) · stat deltas (win/loss recorded, rating/tier change) · actions: `Rematch` (same players back to Lobby, roles re-open) · `Return to dashboard` · `Share result` (later).
 - **States:** computing · shown · rematch pending (waiting for players to accept).
 - **Enters from:** In-Game end. **Exits to:** `/room/[code]` (rematch) or `/dashboard`.
 
