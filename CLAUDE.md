@@ -99,7 +99,7 @@ A **design system doc** (`DESIGN_SYSTEM.md`) will be created during Phase 0 once
 | Detective blocking | A Detective **cannot** move onto a node occupied by another Detective. |
 | Catch | Any Detective landing on Vedha's exact node → **Detectives win immediately.** Same if Vedha is forced onto an occupied Detective node. |
 | Stuck Detective | A Detective with no usable ticket for any connection at its node is **stuck for the rest of the game** — still occupies/blocks that node, **auto-skipped** in turn rotation, visually marked "stuck". |
-| Runner win | Survives through the end of **round 24**, OR **every Detective becomes stuck** before round 24 completes. |
+| Runner win | Survives through the end of **round 24**, OR **every Detective can no longer move** before round 24 completes (out of usable tickets, or abandoned and not taken over). |
 | Runner stuck (no legal move) | **Detectives win** — matches the official rule (a Mr. X who cannot move is captured). Rare in practice now that Vedha gains Detectives' spent tickets. |
 | Ticket handoff | **Implemented (real Scotland Yard rule).** When a Detective spends an Auto / Bus / Metro ticket, that ticket is added to Vedha's wallet and Vedha may spend it on a later turn. Vedha's **Wildcard and Double-Move counts are never increased this way** (they stay at the fixed 5 / 2). Detectives never get tickets back — their wallets only shrink. |
 
@@ -120,7 +120,7 @@ The Runner's real position must be **server-authoritative** and never sent to De
 
 **Design now, build later:**
 - `/room/[code]/play` — In-Game (Vedha view vs Detective view; board, HUD with always-available Manual + Leave, colour-coded ticket panel, 24-round travel log, reveal-round state, stuck-pawn state, shared voice, public + detectives-only chat tabs). No turn timer, no deduction assist, no screen-share.
-  - **Disconnects:** a Detective drop is non-blocking (pawn greys, turn auto-skipped, resumes on rejoin). A **Vedha drop pauses the game** — remaining players see a blocking `Vedha has disconnected · Waiting for them to return…` overlay with an **`Exit game`** CTA; clicking it ends the game → **Detectives win**. No auto-timeout; Vedha reconnecting clears it. `Leave game` by Vedha = instant Detectives win; by a Detective = that pawn is stuck.
+  - **Leaving / disconnects:** anyone can `Leave game` any time. A **Detective** leaving or dropping → their pawn stays put and stops moving (abandoned; blocks its node; counts as stuck for win checks). **Any remaining player can click an abandoned pawn to take it over** for the rest of the game (keeps its node + tickets; one player may run several). Original resumes on reconnect only if nobody took it over. A **Vedha** drop **pauses the game** — remaining players see a blocking `Vedha has disconnected · Waiting for them to return…` overlay with an `Exit game` CTA (any player); pressing it → **Detectives win** ("Vedha left the game"). No auto-timeout; reconnect clears it. Vedha pressing `Leave game` = instant Detectives win.
 - `/room/[code]/results` — outcome, full reveal of Vedha's route, stat deltas, Rematch / Return to dashboard
 - `/u/[username]` Profile · `/game/[gameId]` Match Detail/Replay · `/friends` · `/settings`
 - Global: top nav, toast system, per-panel skeletons, empty/error states, 404/500, offline banner, confirm dialogs, presence dots, host migration

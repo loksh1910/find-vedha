@@ -40,7 +40,7 @@
 | Detective blocking | A Detective cannot move onto a node occupied by another Detective. |
 | Catch | Any Detective moving onto Vedha's exact node → **Detectives win immediately.** Same if Vedha is forced onto an occupied Detective node. |
 | Stuck Detective | No usable ticket for any connection → stuck for the rest of the game; still blocks its node, **auto-skipped in turn rotation**, marked "stuck". |
-| Runner win | Survives to the end of round 24, **or** every Detective becomes stuck before round 24 ends. |
+| Runner win | Survives to the end of round 24, **or** every Detective becomes unable to move before round 24 ends (out of usable tickets, or abandoned and not taken over). |
 | Runner stuck (no legal move) | **Detectives win** (matches the official rule). Rare now that Vedha gains Detectives' spent tickets. |
 | Ticket handoff | **In scope (real rule).** When a Detective spends an Auto/Bus/Metro ticket it is added to Vedha's wallet and Vedha may spend it later. Vedha's Wildcard / Double-Move counts never increase this way. Detectives never get tickets back. |
 | River / Wildcard-only shortcut routes | **In scope.** ~2–4 long `transport: "river"` edges, roughly along the two river curves, crossable only with a Wildcard. Authored with the board graph in Phase 3. |
@@ -309,12 +309,14 @@ Each screen: **Route** · **Purpose** · **Layout regions** · **Every element**
     - **Detectives only** — Detectives only; where they discuss anything they want kept from Vedha.
     - Vedha's client only has the Public tab.
 - **Sub-states:** your turn / not your turn · **reveal-round moment** (Vedha pin drops for all with a pulse; stays until Vedha's next move, then re-hides for Detectives; for Vedha, an "exposed" cue) · **Double-Move in progress** ("Vedha used a Double-Move") · **Wildcard used** ("transport unknown") · **Detective stuck** (pawn greyed, "no usable tickets", dropped from the turn queue, still blocks its node) · **waiting for opponent** · **illegal move feedback**.
-- **Disconnects:**
-  - **A Detective disconnects** — non-blocking banner (`D3 lost connection`), their pawn greys; the game continues, and their turn is auto-skipped until they rejoin (they resume control on reconnect).
-  - **Vedha disconnects** — the game **pauses** (Vedha moves first each round, so it can't proceed). The remaining players get a **blocking overlay**: heading `Vedha has disconnected`, message `Waiting for them to return…`, an elapsed indicator, and a single **`Exit game`** CTA. No auto-timeout — it waits indefinitely. If Vedha **reconnects**, the overlay clears and play resumes from Vedha's turn. If a player clicks **`Exit game`**, the game ends immediately → **Detectives win** ("Vedha left the game"). *(Open: can any remaining player click Exit, or host only? Default: any player.)*
-  - **`Leave game`** in the HUD is a deliberate quit (forfeit-confirm). If **Vedha** leaves, the game ends at once → Detectives win. If a **Detective** leaves, their pawn is treated as stuck for the rest of the game.
+- **Leaving & disconnects** — anyone can leave a game at any time via the HUD `Leave game` button (confirm).
+  - **A Detective leaves or disconnects** — the game keeps going. Their pawn **stays on its current node and stops moving** (its turn is skipped; it still blocks that node; it counts the same as a stuck pawn for win checks). The pawn is shown in an **abandoned** state (dashed outline).
+    - **Any remaining player can click an abandoned pawn to take control of it** — confirm (`Take over Detective 3? You'll play it alongside your own for the rest of the game.`), then it re-enters the turn queue at its slot with its current node and remaining tickets. One player can end up running several pawns this way. If the original player reconnects and the pawn hasn't been taken over, they resume it; if it has, they spectate.
+  - **Vedha leaves or disconnects** — the game **pauses** (Vedha moves first each round, so it can't proceed).
+    - **Leave** (deliberate): the game ends at once → **Detectives win** ("Vedha left the game").
+    - **Disconnect** (involuntary): the remaining players get a **blocking overlay** — heading `Vedha has disconnected`, message `Waiting for them to return…`, an elapsed indicator, and one **`Exit game`** CTA (any player can press it). No auto-timeout. If Vedha **reconnects**, the overlay clears and play resumes from Vedha's turn. If a player presses **`Exit game`**, the game ends → **Detectives win** ("Vedha left the game").
 - **Enters from:** transition.
-- **Exits to:** `/room/[code]/results` on catch / escape / all-Detectives-stuck / Vedha leaving or not returning.
+- **Exits to:** `/room/[code]/results` on catch / escape / all-Detectives-stuck-or-abandoned / Vedha leaving or not returning.
 
 ---
 
