@@ -66,6 +66,20 @@ Only on the board, the transport legend, and transport/ticket chips. Never UI ch
 | `--t-auto` | `#E6B12E` | Auto (yellow) |
 | `--t-bus` | `#3E9B4F` | Bus (green) |
 | `--t-metro` | `#CE4B4B` | Metro (red) |
+| `--t-river` | `#4A86C4` | River / Wildcard-only edge (blue, dashed) |
+
+### In-game / board palette
+The game screen (`/room/[code]/play`) uses a Google-Maps-dark canvas, and swaps the amber UI accent for a **cool cyan** so it doesn't compete with the yellow Auto network that covers the board.
+| Token | Hex | Use |
+|---|---|---|
+| `--game-canvas` | `#0E1116` | board background — near-black, minimal |
+| `--game-water` | `#16324A` | the river band under the dashed river edge |
+| `--game-accent` | `#45CFE0` | in-game UI accent — active turn, legal-move rings, tab underlines, primary game buttons |
+| `--game-accent-ink` | `#06222A` | text/icon on a `--game-accent` fill |
+| `--node-ink` | `#241C08` | the station number inside the yellow capsule body |
+| `--reveal` | `#FF5DB1` | Vedha's reveal marker + "Vedha surfaced" flash + "last seen" ring — magenta, pops against yellow |
+
+**Station marker** (`node-marker.tsx`) — a vertical capsule: yellow rounded-rect body with the number, a semicircle cap above (green = Bus) and below (red = Metro). Auto-only = all yellow. Detective slot CSS vars stay `--tr-1`…`--tr-5`.
 
 ### Detective slot colours
 Five, each clearly separable from amber and from the three transport hues. CSS vars keep the short `--tr-*` names.
@@ -156,3 +170,4 @@ Near-none by design (over-animation reads as AI-generated).
 ## 8. Change log
 
 - **2026-08-30** — v1. Established for the Phase 0/1 front-of-house build (Landing → Lobby → transition), mock data, dark-only.
+- **2026-08-31** — added the in-game / board palette (`--game-canvas`, `--game-accent` cyan, `--reveal` magenta, `--t-river`) and the station-marker capsule spec, for the interactive in-game mock.

@@ -10,7 +10,14 @@ Guidance for Claude Code (claude.ai/code) working in this repository. These inst
 
 **Master reference:** [SITEMAP.md](SITEMAP.md) is the authoritative list of every screen and state. **If something is not in SITEMAP.md, do not build it without adding it there first.** If the user approves a change mid-build, update SITEMAP.md to match in the same session.
 
-**Current status:** Scaffolded (Next.js 16 + React 19 + Tailwind v4). **Phase 1 front-of-house is built on mock state** — the full flow Landing → Auth → Dashboard → Create Room → Join → Lobby (5 phases: roster → 10s role claim → auto-fill → ready-up → 5s countdown) → transition → `/room/[code]/play` placeholder. `npm run build` + `npm run lint` clean; walked end-to-end in the browser with no console errors. Next up: design polish per screen with the user, then Phase 2 (Supabase). The in-game engine is not built.
+**Current status:** Scaffolded (Next.js 16 + React 19 + Tailwind v4). Everything below runs on **mock client-side state — no backend yet.**
+
+- **Phase 1 front-of-house (built):** Landing → Auth → Dashboard → Create Room → Join → Lobby (5 phases: roster → 10s role claim → auto-fill → ready-up → 5s countdown) → transition.
+- **In-game screen (built as an interactive mock):** `/room/[code]/play` is a playable Vedha-vs-Detective game running a client-side mock engine — 24-round turn machine, legal moves, ticket spend + handoff, Wildcard, Double-Move, reveal rounds, win detection. A `View: Vedha / View: Detectives` switch shows both interfaces; an `Auto Detectives` toggle is a demo AI. **The board is a 63-node placeholder lattice, not the authored 199-node Chennai board (Phase 3).**
+
+`npm run build` + `npm run lint` clean; both flows walked end-to-end in the browser with no console errors.
+
+**Next up:** refine the in-game visuals (node clarity, mesh density, letterbox) and per-screen design polish with the user; then Phase 2 (Supabase) and Phase 3 (real board graph).
 
 ---
 
@@ -104,7 +111,25 @@ A **design system doc** (`DESIGN_SYSTEM.md`) will be created during Phase 0 once
 | Ticket handoff | **Implemented (real Scotland Yard rule).** When a Detective spends an Auto / Bus / Metro ticket, that ticket is added to Vedha's wallet and Vedha may spend it on a later turn. Vedha's **Wildcard and Double-Move counts are never increased this way** (they stay at the fixed 5 / 2). Detectives never get tickets back — their wallets only shrink. |
 
 ### Hidden-info enforcement (non-negotiable)
-The Runner's real position must be **server-authoritative** and never sent to Detective clients except on reveal rounds / at game end — enforce with Supabase Row Level Security, not just client-side hiding, or it's inspectable via browser dev-tools. Move validation, catch detection, turn/round progression, and win/lose resolution are all validated database-side.
+The Runner's real position must be **server-authoritative** and never sent to Detective clients except on reveal rounds / at game end — enforce with Supabase Row Level Security, not just client-side hiding, or it's inspectable via browser dev-tools. Move validation, catch detection, turn/round progression, and win/lose resolution are all validated database-side. *(The current mock does hidden-info in the UI layer only — that's a placeholder until Phase 5.)*
+
+---
+
+## Where things live
+
+| Path | What |
+|---|---|
+| `src/app/` | routes. `(app)/` = route group with the left-rail shell + mock auth guard. `room/[code]/` (Lobby, `play/`) sits outside the group — full-bleed, no guard. |
+| `src/components/providers/app-state-provider.tsx` | mock session + created rooms (`localStorage`). `useAppState()`. |
+| `src/components/shell/` | left rail, auth shell, route diagram bg, logo, placeholder screens. |
+| `src/components/lobby/` | the 5-phase Lobby machine (`lobby-client.tsx`) + slot card + transition. |
+| `src/components/manual/` | `<ManualContent>` (rules) + `<ManualDialog>` — reused on Landing, Lobby, in-game. |
+| `src/components/game/` | the in-game screen. `game-provider.tsx` holds live `GameState` + `viewAs` + demo controls; `game-screen.tsx` assembles HUD / board / rail / ticket panel / move controls; `board-canvas.tsx` + `node-marker.tsx` render the SVG board (capsule markers). |
+| `src/lib/game/` | `types.ts` (GameState, reveal rounds) + `engine.ts` (pure: `createGame`, `legalMoves`, `applyMove`, `declareDoubleMove`, `autoDetectiveMove`). |
+| `src/lib/board/board-data.ts` | **placeholder** 63-node lattice board (procedural). Replace in Phase 3 with the authored 199-node graph — keep the `Board` / `BoardNode` / `BoardEdge` shape. |
+| `src/lib/roles.ts` | slot defs (`DETECTIVE_SLOTS`), colours, `autoFill`. Slot CSS vars stay `--tr-1`…`--tr-5`. |
+| `src/lib/mock.ts` | static mock data (friends, stats, lobby bots). |
+| `src/app/globals.css` + `DESIGN_SYSTEM.md` | dark-only tokens. In-game palette: `--game-canvas` (near-black), `--game-accent` (cyan — used instead of amber on the game screen so it doesn't fight the yellow board), `--reveal` (magenta), `--t-river`. |
 
 ---
 
@@ -147,20 +172,20 @@ Edge cases: player leaves during B/C (slot re-opens / re-fills; below 2 players 
 
 ## Build order (phases)
 
-| Phase | What |
-|---|---|
-| **−1** | Full sitemap — SITEMAP.md. **Status: in review (v2).** |
-| **0** | Per-screen layout design, user-driven. Order: Landing → Manual → Auth → Dashboard → Create Room → Join → Lobby → Transition. Ask the user for each layout; confirm before building. |
-| **1** | Build front-of-house UI (Landing → Lobby → transition) on **mocked local state** first. |
-| **2** | Wire Supabase: auth (username/avatar), rooms, invite codes, Lobby realtime (roster, 10s claim timer, auto-fill, ready-up, 5s countdown), host controls. |
-| **3** | Board data: the full **199-node Chennai graph** (ids, x/y coords, edges with transport type incl. ~2–4 Wildcard-only river edges, ~20 start-node flags) as JSON. Its own review checkpoint before any game logic. |
-| **4** | In-game engine (local): board renders from data, movement + ticket logic, hidden-Runner logic, reveal rounds, win/loss detection, end-game screen. |
-| **5** | Realtime sync of in-game moves across tabs/devices. |
-| **6** | Social layer: video chat (Daily.co), text chat. |
-| **7** | Results, profiles, stats, match history, friends list. |
-| **8** | Polish (dark-only): node hover states, smooth pan/zoom, sound, move/reveal animations, onboarding. (Turn timer — deferred, not in scope.) |
+| Phase | What | Status |
+|---|---|---|
+| **−1** | Full sitemap — SITEMAP.md. | in review (v2) |
+| **0** | Per-screen layout design, user-driven. Order: Landing → Manual → Auth → Dashboard → Create Room → Join → Lobby → Transition. Ask the user for each layout; confirm before building. | done through Lobby; in-game direction set with the user |
+| **1** | Front-of-house UI (Landing → Lobby → transition) on mocked local state. | **built** |
+| **2** | Wire Supabase: auth (username/avatar), rooms, invite codes, Lobby realtime (roster, 10s claim timer, auto-fill, ready-up, 5s countdown), host controls. | — |
+| **3** | Board data: the full **199-node Chennai graph** (ids, x/y coords, edges with transport type incl. ~2–4 Wildcard-only river edges, ~20 start-node flags) as JSON. Its own review checkpoint. | — (63-node placeholder in use) |
+| **4** | In-game engine (local): board renders from data, movement + ticket logic + handoff, Wildcard, Double-Move, hidden-Vedha logic, reveal rounds, win/loss detection, both interfaces, end-game screen. | **built as an interactive mock** on the placeholder board; needs the real board + visual refinement |
+| **5** | Realtime sync of in-game moves across tabs/devices (Supabase, RLS hides Vedha's node). | — |
+| **6** | Social layer: video chat (Daily.co), text chat wired to real channels. | — (tiles + chat are mock UI) |
+| **7** | Results, profiles, stats, match history, friends list. | — |
+| **8** | Polish (dark-only): node hover states, smooth pan/zoom, sound, move/reveal animations, onboarding. (Turn timer — deferred, not in scope.) | — |
 
-**Current build scope:** everything from the Landing page through the **Lobby → game transition animation**. There is no separate Role Reveal screen. Vedha's private start node + wallet surface on Vedha's own board view when the game screen first loads (built in Phase 4).
+**Current build scope:** the whole flow Landing → Lobby → transition → in-game is clickable/playable on mock state. No Supabase, no real board graph, no realtime, no real video. There is no separate Role Reveal screen.
 
 ---
 
@@ -211,8 +236,12 @@ Run **both** `npm run build` and `npm run lint` before considering a change done
 3. **Reading `localStorage` during render (even inside `useMemo`) causes an SSR/first-client-render hydration mismatch.** Hit this in `lobby-client.tsx` — `room.name` from `findRoom()` (which reads `localStorage`) rendered `"Room ABC123"` on the server and the real created-room name on the client. Gate any such lookup on the provider's `hydrated` flag and return the SSR-matching fallback until it's true.
 4. **Scaffolding into `C:\Users\lokes\Desktop\SLY` directly fails** — `create-next-app` rejects the capitalised folder name ("npm naming restrictions"). It was scaffolded in a temp dir as `find-vedha` and moved in; `package.json` `name` is `find-vedha`.
 5. **`preview_start` resolves `.claude/launch.json` from the session's primary working directory (the Loku project), not from SLY** — so `preview_start({ name: "find-vedha" })` starts the wrong server. Run `npm run dev` via a background shell and point the browser at `http://localhost:3000` with `preview_start({ url: … })` / `navigate` instead.
+6. **Verifying the in-game screen in the browser tool is fiddly.** With a viewport emulation larger than the pane, screenshots look like the layout collapsed and synthetic `ref`-clicks miss. It doesn't — `getBoundingClientRect()` is ground truth (the game screen fills `h-dvh` correctly). Verify with `javascript_tool` (read state, dispatch clicks on elements) and reset to the `desktop` preset for clean screenshots. The game screen is desktop-first (≥1280px comfortable).
+7. **The demo `autoDetectiveMove` must never read Vedha's real node** — it only knows the last *revealed* node (else it wanders). Early versions pathed straight to `state.pawns.vedha.node` and caught Vedha on round 1 every time.
 
 ## Design notes / refinements to make
 
-- **Lobby vertical balance** — the Lobby content is short and leaves a lot of empty space below on tall viewports. Next design pass: vertically centre the centre column, or give the chat / a "what happens next" panel more presence.
+- **In-game board:** it's the 63-node placeholder — swap for the authored 199-node graph in Phase 3. Also: the three node types (Auto / Auto+Bus / Auto+Bus+Metro) could read clearer (the green/red semicircle caps are small at default zoom); the Auto mesh is visually busy; the board letterboxes horizontally (viewBox aspect vs. container).
+- **Lobby vertical balance** — short content, lots of empty space below on tall viewports. Centre the column or give chat more presence.
+- **In-game responsive** — desktop-first; narrow widths overflow horizontally. Not designed for mobile yet.
 - Design-notes log lives at `docs/design-notes.md` once we start iterating on screens.
