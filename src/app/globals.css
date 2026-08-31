@@ -34,6 +34,16 @@
   --t-auto: #e6b12e;
   --t-bus: #3e9b4f;
   --t-metro: #ce4b4b;
+  --t-river: #4a86c4;
+
+  /* in-game board (Google-Maps-dark style) + a cooler accent so it
+     doesn't fight the yellow taxi network. See DESIGN_SYSTEM.md §2. */
+  --game-canvas: #0e1116;
+  --game-water: #16324a;
+  --game-accent: #45cfe0;
+  --game-accent-ink: #06222a;
+  --node-ink: #241c08;
+  --reveal: #ff5db1;
 
   /* detective slot colours */
   --tr-1: #3e9bff;
@@ -76,6 +86,13 @@
   --color-t-auto: var(--t-auto);
   --color-t-bus: var(--t-bus);
   --color-t-metro: var(--t-metro);
+  --color-t-river: var(--t-river);
+
+  --color-game-canvas: var(--game-canvas);
+  --color-game-water: var(--game-water);
+  --color-game-accent: var(--game-accent);
+  --color-game-accent-ink: var(--game-accent-ink);
+  --color-reveal: var(--reveal);
 
   --color-tr-1: var(--tr-1);
   --color-tr-2: var(--tr-2);
