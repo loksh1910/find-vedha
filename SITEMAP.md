@@ -152,7 +152,7 @@ Each screen: **Route** · **Purpose** · **Layout regions** · **Every element**
 ---
 
 ### A2. Manual / How to Play  *(build now — page + reusable modal)*
-- **Route:** `/how-to-play` (standalone page) — **and** the same content as a `<ManualDialog>` modal/side-panel reused from the Landing nav and the Lobby "Manual" button.
+- **Route:** `/how-to-play` (standalone page) — **and** the same content as a `<ManualDialog>` modal/side-panel reused from the Landing nav, the Lobby "Manual" button, and the in-game HUD "Manual" button (openable any time during a game).
 - **Purpose:** Complete rules reference without leaving the current screen.
 - **Contents:** objective · roles (Vedha vs Detectives) · the board & transport tiers (Auto/Bus/Metro + color key) · river / Wildcard-only crossings · ticket counts (both roles) · Wildcard & Double-Move explained · **ticket handoff** (every ticket a Detective spends goes to Vedha) · turn order · hidden movement · reveal rounds (3/8/13/18/24) · catching Vedha · stuck Detectives · win conditions · a worked example turn.
 - **States:** page view · modal view (scroll-locked body, close button, ESC to close) · section anchor links.
@@ -288,18 +288,27 @@ Each screen: **Route** · **Purpose** · **Layout regions** · **Every element**
 
 ### H. In-Game screen  *(design now — BUILD LATER)*
 - **Route:** `/room/[code]/play`
-- **Purpose:** Play the hidden-chase game. One shared layout; a **Runner view** and a **Detective view** differ in what board info they expose.
-- **Board canvas:** 199 nodes on the Chennai background · edges yellow (Auto) / green (Bus) / red (Metro) + a few dashed **river / black-line** edges (Wildcard-only), a node's touching colors = its transports · pan (drag) + zoom (wheel / pinch), min/max, smooth transitions · Detective pawns always visible to all (color + number) · **Vedha pawn visible only in the Runner view**; in the Detective view it appears only on reveal rounds and at game end · on your turn, reachable nodes (you hold a matching ticket) highlight; node hover/focus states.
-- **HUD (top):** `Round X / 24` · whose turn (`Vedha's move` / `Detective 3 (Purple)` / `Your move`) · **who is Vedha** (public, e.g. "Vedha: Arjun") · next-reveal indicator (`Next reveal: round 8`) · big `REVEAL` banner on 3/8/13/18/24 · turn timer countdown ring (polish).
-- **Ticket panel:** the current viewer's wallet, counts + icons, **color-coded to the player/slot**. Runner also shows Wildcard + Double-Move — and Vedha's Auto/Bus/Metro counts **tick up over the game** as Detectives spend tickets (ticket handoff); a small "+1 from a Detective" cue when it happens.
-- **Move flow:** pick a highlighted node → if multiple transports connect, choose Auto/Bus/Metro (or a **river edge** → Wildcard is forced) → Runner only: optionally spend a **Wildcard** (hides transport type) or start a **Double-Move** (repeat for the 2nd move) → `Confirm`. Illegal picks: inline feedback ("No Bus ticket", "Occupied by a Detective", "River crossings need a Wildcard").
-- **Move history / travel log (side panel):**
-  - Runner view: each round's transport icon **and the node numbers Vedha visited** (own breadcrumb) + Double-Move / Wildcard markers.
-  - Detective view: each round's transport icon only (or "Wildcard — unknown") + pinned Vedha positions from past reveal rounds. No node numbers for hidden rounds.
-- **Runner-only extras:** persistent "You are at #NN" · route breadcrumb · "hidden" indicator (or "VISIBLE THIS ROUND" during a reveal).
-- **Detective-only extras:** last revealed Vedha position + the round it was seen · your other pawns and their remaining tickets · optional private deduction-notes scratchpad.
-- **Comms:** Daily.co video tiles as a dockable/collapsible strip · text chat collapsible sidebar (room channel) · `Screen share` button — **UI only, non-functional**.
-- **Sub-states:** your turn / not your turn · **reveal-round moment** (Vedha pin drops for all with a pulse; stays until Vedha's next move, then re-hides for Detectives) · **Double-Move in progress** ("Vedha used a Double-Move") · **Wildcard used** ("transport unknown") · **Detective stuck** (pawn greyed, "no usable tickets", auto-skipped) · **waiting for opponent** · **player disconnected mid-game** (banner + grace timer → reconnect, else that pawn treated as auto-stuck / turn auto-skipped) · **illegal move feedback**.
+- **Purpose:** Play the hidden-chase game. One shared layout; a **Vedha view** and a **Detective view** differ only in what they're allowed to see.
+- **No coaching / no deduction assist** for either side — no possible-location cloud, no reachability or "danger" overlays, no suggestion markers. Players deduce from the board, the travel log, voice and chat, nothing else. (Showing your own legal destinations on your turn is move-legality UX, not assist.)
+- **No turn timer.** The game ends only by: Vedha survives through round 24 · every Detective is out of usable tickets (all stuck) · a Detective steps onto Vedha's exact node.
+- **Board canvas (centre):** 199 nodes on the Chennai background · edges yellow (Auto) / green (Bus) / red (Metro) + a few dashed **river / black-line** edges (Wildcard-only), a node's touching colours = its transports · pan (drag) + zoom (wheel / pinch), min/max, smooth transitions · a **fit-board** control and a **jump-to-#** node search · Detective pawns always visible to all (colour + number), the pawn to move pulses · **Vedha pawn visible only in the Vedha view**; in the Detective view it shows only on reveal rounds and at game end, then leaves a "last known — round N" marker · on your turn, reachable nodes (you hold a matching ticket) highlight, hovering shows the edge + ticket cost.
+- **HUD (top):** `Round X / 24` with a reveal tick-strip (3·8·13·18·24) · whose turn + the round's turn queue (Vedha → D1 → D2 …) · **who is Vedha** (public, e.g. "Vedha: Arjun") · `Next reveal: round 8` / a `REVEAL THIS ROUND` banner · always-present **`Manual`** button (opens the rules overlay at any time) and **`Leave game`** button (forfeit confirm) · sound / board-contrast / fullscreen in a small menu.
+- **Ticket panel (bottom):** the current viewer's wallet, counts + icons, colour-coded to the player/slot.
+  - **Vedha:** Auto / Bus / Metro + Wildcard ×N + Double-Move ×N. The Auto/Bus/Metro counts **tick up over the game** as Detectives spend tickets (handoff), with a `+1 Auto (from D2)` cue. Basic vs special tickets visually separated.
+  - **Detective:** Auto / Bus / Metro per pawn you control (shrinking); low-ticket warning (`D3: 1 Metro, 0 Bus`); compact multi-wallet when you run 2–3 pawns.
+- **Move flow:** pick a highlighted node → choose Auto/Bus/Metro if the edge is ambiguous (a **river edge** forces Wildcard) → Vedha only: optionally spend a **Wildcard** (hides the transport type from Detectives) or **Start Double-Move** (plot both hops, then confirm together) → preview (`#127 → #142 by Bus · Detectives see: BUS`; for a Detective: `D3: #88 → #140 by Metro · this ticket goes to Vedha`) → `Confirm` / `Undo`. Illegal picks: inline feedback ("No Bus ticket", "Occupied by a Detective", "River crossings need a Wildcard").
+- **Travel log — the core panel (right rail), a 24-round record:**
+  - **Detective view:** every round 1→24, **the transport card Vedha used** (Auto / Bus / Metro icon, or a **Wildcard** marker — Wildcard shows *that* a Wildcard was used, not the real type). **No node numbers**, except reveal rounds (3/8/13/18/24) which also show Vedha's exact node. Reveal rows visually marked. Double-Move = two entries in one round's slot.
+  - **Vedha view:** the same 24-round record **plus the node number for every round** (`R6 · #142 · Bus`). Same Wildcard / Double-Move markers.
+- **Vedha-only extras:** persistent `You are at #142` · own path drawn on the board (toggle) · `HIDDEN` / `EXPOSED — you re-hide on your next move` status.
+- **Detective-only extras:** `Last seen: #127 — round 3` · your pawn(s) and their remaining tickets.
+- **Comms:**
+  - **Voice** — one shared Daily.co room; **everyone including Vedha talks and hears freely** (like sitting at the same table). Dockable / collapsible video tiles. **No screen-share button.**
+  - **Chat panel with a mode switch:**
+    - **Public** — Vedha and all Detectives can type and read.
+    - **Detectives only** — Detectives only; where they discuss anything they want kept from Vedha.
+    - Vedha's client only has the Public tab.
+- **Sub-states:** your turn / not your turn · **reveal-round moment** (Vedha pin drops for all with a pulse; stays until Vedha's next move, then re-hides for Detectives; for Vedha, an "exposed" cue) · **Double-Move in progress** ("Vedha used a Double-Move") · **Wildcard used** ("transport unknown") · **Detective stuck** (pawn greyed, "no usable tickets", dropped from the turn queue, still blocks its node) · **waiting for opponent** · **player disconnected mid-game** (banner + grace timer → reconnect, else a Detective pawn is auto-skipped; Vedha disconnect handling TBD) · **illegal move feedback**.
 - **Enters from:** transition.
 - **Exits to:** `/room/[code]/results` on catch / escape / all-Detectives-stuck.
 
@@ -376,7 +385,7 @@ Each screen: **Route** · **Purpose** · **Layout regions** · **Every element**
 ## 4. Global / cross-cutting components & states
 
 - **Top nav** (signed-in): wordmark · Friends · Settings · avatar menu. Hidden on Landing/Auth and In-Game (In-Game has its own HUD).
-- **`<ManualDialog>`** — the how-to-play content as a modal/side-panel; reused on Landing and in the Lobby. Standalone page at `/how-to-play`.
+- **`<ManualDialog>`** — the how-to-play content as a modal/side-panel; reused on Landing, in the Lobby, and in-game (openable any time). Standalone page at `/how-to-play`.
 - **Transition animation** component — Lobby → board.
 - **Toast / notification system:** friend request received, room invite received, "game is starting", "it's your turn", errors.
 - **Loading:** per-panel skeletons; full-page spinner only on `/auth/callback`.
@@ -393,8 +402,10 @@ Each screen: **Route** · **Purpose** · **Layout regions** · **Every element**
 ## 5. Realtime & authority model (summary — full design when we build in-game)
 
 - **Server-authoritative (Supabase; never sent to the wrong client):** Vedha's current node — readable by Vedha's own client always; by Detective clients only on a reveal round or at game end (enforced by Row Level Security). Also: the start-node draw, ticket wallets, move validation, catch detection, round/turn progression, win/lose resolution — validated database-side so a tampered client can't move illegally or read hidden data.
-- **Broadcast to everyone:** round number · whose turn · each Detective's position + wallet · Vedha's Auto/Bus/Metro wallet counts (they grow via ticket handoff; Wildcard / Double-Move counts stay hidden) · the transport type Vedha used each round (unless Wildcard → "unknown") · reveal-round Vedha position · **who is Vedha** (public) · chat · presence.
-- **Channels:** one Supabase Realtime channel per room (game state + presence + text chat). Video is a separate Daily.co room keyed to the room code.
+- **Broadcast to everyone:** round number · whose turn · each Detective's position + wallet · Vedha's Auto/Bus/Metro wallet counts (they grow via ticket handoff; Wildcard / Double-Move counts stay hidden) · the transport card Vedha used each round (Auto/Bus/Metro, or "Wildcard" without the real type) · reveal-round Vedha position · **who is Vedha** (public) · presence.
+- **Chat:** two scopes — **public** (Vedha + all Detectives) and **detectives-only** (Detectives). Enforced server-side, not just hidden in the UI.
+- **Voice:** one shared Daily.co room for the whole table, Vedha included. No private voice, no screen-share.
+- **Channels:** one Supabase Realtime channel per room for game state + presence + public chat; a second restricted channel (RLS: role = detective) for detectives-only chat. Video is a separate Daily.co room keyed to the room code.
 
 ---
 
@@ -411,7 +422,7 @@ Each screen: **Route** · **Purpose** · **Layout regions** · **Every element**
 | 5 | Realtime sync of in-game moves across devices | — |
 | 6 | Social: video chat, text chat | — |
 | 7 | Results, profiles, stats, match history, friends | — |
-| 8 | Polish (dark-only): node hover states, smooth pan/zoom, move/reveal animations, sound, turn-timer ring, onboarding | — |
+| 8 | Polish (dark-only): node hover states, smooth pan/zoom, move/reveal animations, sound, onboarding. (Turn timer — deferred, not in scope) | — |
 
 **Deployment:** nothing goes to public hosting at any point without your explicit instruction. Everything runs on `localhost`.
 

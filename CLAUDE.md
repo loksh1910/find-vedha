@@ -119,7 +119,7 @@ The Runner's real position must be **server-authoritative** and never sent to De
 - Lobby → game **transition animation** (transient, not a route)
 
 **Design now, build later:**
-- `/room/[code]/play` — In-Game (Runner view vs Detective view; board, HUD, color-coded ticket panel, move log, reveal-round state, stuck-pawn state, video tiles, text chat, non-functional screen-share button)
+- `/room/[code]/play` — In-Game (Vedha view vs Detective view; board, HUD with always-available Manual + Leave, colour-coded ticket panel, 24-round travel log, reveal-round state, stuck-pawn state, shared voice, public + detectives-only chat tabs). No turn timer, no deduction assist, no screen-share.
 - `/room/[code]/results` — outcome, full reveal of Vedha's route, stat deltas, Rematch / Return to dashboard
 - `/u/[username]` Profile · `/game/[gameId]` Match Detail/Replay · `/friends` · `/settings`
 - Global: top nav, toast system, per-panel skeletons, empty/error states, 404/500, offline banner, confirm dialogs, presence dots, host migration
@@ -157,7 +157,7 @@ Edge cases: player leaves during B/C (slot re-opens / re-fills; below 2 players 
 | **5** | Realtime sync of in-game moves across tabs/devices. |
 | **6** | Social layer: video chat (Daily.co), text chat. |
 | **7** | Results, profiles, stats, match history, friends list. |
-| **8** | Polish (dark-only): node hover states, smooth pan/zoom, turn timer w/ countdown, sound, move/reveal animations, onboarding. |
+| **8** | Polish (dark-only): node hover states, smooth pan/zoom, sound, move/reveal animations, onboarding. (Turn timer — deferred, not in scope.) |
 
 **Current build scope:** everything from the Landing page through the **Lobby → game transition animation**. There is no separate Role Reveal screen. Vedha's private start node + wallet surface on Vedha's own board view when the game screen first loads (built in Phase 4).
 
@@ -167,7 +167,9 @@ Edge cases: player leaves during B/C (slot re-opens / re-fills; below 2 players 
 
 - **AI bot Detectives** — v2 feature. The "Fill empty Detective slots with AI?" toggle exists in the UI but is **disabled / "Coming soon"** for MVP. Unclaimed slots go to human players (one player can hold several).
 - **Public matchmaking / lobbies** — invite-code only, friends-only.
-- **Functional screen-share** — the button is **UI only** for the demo.
+- **Screen-share** — no button at all (dropped).
+- **In-game turn timer** — deferred; not built, not decided. The game ends only on escape (round 24), all Detectives stuck, or a catch.
+- **In-game deduction assist** — no possible-location cloud, no reachability / danger overlays, no suggestion markers. Both sides deduce unaided from the board + travel log + voice/chat. (Highlighting your own legal destinations on your turn is fine — that's move legality, not assist.)
 - **Avatar upload** — preset avatars only for MVP.
 - **Deploying anywhere.** See below.
 
