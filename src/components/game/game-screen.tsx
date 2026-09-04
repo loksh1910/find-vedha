@@ -4,7 +4,6 @@ import { useState } from "react";
 import { PanelRightOpen } from "lucide-react";
 import { GameProvider } from "./game-provider";
 import { Hud } from "./hud";
-import { VideoStrip } from "./video-strip";
 import { BoardCanvas } from "./board-canvas";
 import { RevealOverlay } from "./reveal-overlay";
 import { TicketPanel } from "./ticket-panel";
@@ -20,7 +19,6 @@ export function GameScreen() {
         <Hud />
         <div className="flex min-h-0 flex-1">
           <div className="flex min-h-0 min-w-[320px] flex-1 flex-col">
-            <VideoStrip />
             <div className="relative min-h-0 flex-1">
               <BoardCanvas />
               <RevealOverlay />
