@@ -20,12 +20,32 @@ export function LeftRail() {
   const router = useRouter();
   const { session, signOut } = useAppState();
 
+  const doSignOut = () => {
+    signOut();
+    router.push("/");
+  };
+
   return (
     <>
+      {/* mobile top bar — logo (back to the landing page) + sign out, since the
+          desktop rail's bottom section isn't shown at this width */}
+      <header className="md:hidden fixed inset-x-0 top-0 z-40 flex h-14 items-center justify-between border-b border-line bg-surface px-4">
+        <Link href="/" aria-label="Find Vedha — landing page">
+          <Logo size={18} />
+        </Link>
+        <button
+          aria-label="Sign out"
+          className="grid h-8 w-8 place-items-center rounded-md text-muted hover:bg-surface-2 hover:text-danger"
+          onClick={doSignOut}
+        >
+          <LogOut size={16} />
+        </button>
+      </header>
+
       {/* desktop rail */}
       <aside className="hidden md:flex sticky top-0 h-dvh w-[220px] shrink-0 flex-col border-r border-line bg-surface">
         <div className="px-5 py-5">
-          <Link href="/dashboard" aria-label="Find Vedha — dashboard">
+          <Link href="/" aria-label="Find Vedha — landing page">
             <Logo />
           </Link>
         </div>
@@ -62,10 +82,7 @@ export function LeftRail() {
             <button
               aria-label="Sign out"
               className="grid h-8 w-8 place-items-center rounded-md text-muted hover:bg-surface-2 hover:text-danger"
-              onClick={() => {
-                signOut();
-                router.push("/");
-              }}
+              onClick={doSignOut}
             >
               <LogOut size={15} />
             </button>

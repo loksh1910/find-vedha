@@ -10,7 +10,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    if (hydrated && !isSignedIn) router.replace("/login");
+    // "/" (not "/login") so this agrees with the sign-out button's own
+    // navigation — otherwise the two can race and land on different pages.
+    if (hydrated && !isSignedIn) router.replace("/");
   }, [hydrated, isSignedIn, router]);
 
   if (!hydrated || !isSignedIn) {
@@ -24,7 +26,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-dvh">
       <LeftRail />
-      <div className="flex-1 pb-16 md:pb-0">{children}</div>
+      <div className="flex-1 pt-14 pb-16 md:pt-0 md:pb-0">{children}</div>
     </div>
   );
 }
