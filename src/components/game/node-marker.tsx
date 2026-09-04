@@ -9,8 +9,8 @@ import type { BoardNode } from "@/lib/board/board-data";
     autobusmetro  → top semicircle green + bottom semicircle red
 */
 
-const W = 30;
-const BODY_H = 16;
+const W = 34;
+const BODY_H = 17;
 const R = W / 2;
 
 export function NodeMarker({
@@ -83,7 +83,7 @@ export function NodeMarker({
         y={0}
         textAnchor="middle"
         dominantBaseline="central"
-        fontSize={11}
+        fontSize={node.id >= 100 ? 8.5 : 11}
         fontWeight={700}
         fontFamily="var(--font-mono)"
         fill="var(--node-ink)"

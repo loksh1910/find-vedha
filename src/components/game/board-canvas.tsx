@@ -1,21 +1,32 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState, type PointerEvent, type WheelEvent } from "react";
+import {
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent,
+  type WheelEvent,
+} from "react";
 import { Crosshair, Minus, Plus } from "lucide-react";
 import { BOARD, nodeById, type BoardEdge } from "@/lib/board/board-data";
 import { useGame } from "./game-provider";
 import { NodeMarker } from "./node-marker";
 import { cn } from "@/lib/cn";
 
-const EDGE_STYLE: Record<
-  BoardEdge["mode"],
-  { stroke: string; width: number; dash?: string; opacity: number }
-> = {
-  auto: { stroke: "var(--t-auto)", width: 2.5, opacity: 0.5 },
-  bus: { stroke: "var(--t-bus)", width: 5, opacity: 0.85 },
-  metro: { stroke: "var(--t-metro)", width: 4, dash: "2 7", opacity: 0.95 },
-  river: { stroke: "var(--t-river)", width: 3.5, dash: "11 8", opacity: 0.9 },
-};
+const K_MIN = 0.25;
+const K_MAX = 8;
+
+function edgePoints(e: BoardEdge): [number, number][] {
+  const ids = e.path && e.path.length > 1 ? e.path : [e.a, e.b];
+  return ids.map((id) => {
+    const n = nodeById(id);
+    return [n.x, n.y];
+  });
+}
+function toPoly(pts: [number, number][]) {
+  return pts.map((p) => p.join(",")).join(" ");
+}
 
 export function BoardCanvas() {
   const { game, viewAs, vedhaVisible, lastKnown, legalDest, pending, pickNode, myTurn } =
@@ -26,6 +37,7 @@ export function BoardCanvas() {
   const [ty, setTy] = useState(0);
   const [grabbing, setGrabbing] = useState(false);
   const drag = useRef<{ x: number; y: number } | null>(null);
+  const moved = useRef(false);
 
   const toViewBox = useCallback((clientX: number, clientY: number) => {
     const svg = svgRef.current!;
@@ -41,7 +53,7 @@ export function BoardCanvas() {
       const p = toViewBox(e.clientX, e.clientY);
       const cx = (p.x - tx) / k;
       const cy = (p.y - ty) / k;
-      const next = Math.min(3.6, Math.max(0.6, k * (e.deltaY < 0 ? 1.12 : 1 / 1.12)));
+      const next = Math.min(K_MAX, Math.max(K_MIN, k * (e.deltaY < 0 ? 1.15 : 1 / 1.15)));
       setK(next);
       setTx(p.x - cx * next);
       setTy(p.y - cy * next);
@@ -51,6 +63,7 @@ export function BoardCanvas() {
 
   const onPointerDown = (e: PointerEvent<SVGSVGElement>) => {
     drag.current = { x: e.clientX, y: e.clientY };
+    moved.current = false;
     setGrabbing(true);
     (e.target as Element).setPointerCapture?.(e.pointerId);
   };
@@ -58,8 +71,11 @@ export function BoardCanvas() {
     if (!drag.current) return;
     const svg = svgRef.current!;
     const s = BOARD.width / svg.getBoundingClientRect().width;
-    setTx((v) => v + (e.clientX - drag.current!.x) * s);
-    setTy((v) => v + (e.clientY - drag.current!.y) * s);
+    const dx = e.clientX - drag.current.x;
+    const dy = e.clientY - drag.current.y;
+    if (Math.abs(dx) + Math.abs(dy) > 3) moved.current = true;
+    setTx((v) => v + dx * s);
+    setTy((v) => v + dy * s);
     drag.current = { x: e.clientX, y: e.clientY };
   };
   const endDrag = () => {
@@ -76,15 +92,16 @@ export function BoardCanvas() {
     () => Object.values(game.pawns).filter((p) => p.role === "detective"),
     [game.pawns],
   );
+  const autoEdges = useMemo(() => BOARD.edges.filter((e) => e.mode === "auto"), []);
+  const busEdges = useMemo(() => BOARD.edges.filter((e) => e.mode === "bus"), []);
+  const metroEdges = useMemo(() => BOARD.edges.filter((e) => e.mode === "metro"), []);
+  const riverEdges = useMemo(() => BOARD.edges.filter((e) => e.mode === "river"), []);
 
-  // edge from the active pawn to the pending node, to highlight the chosen route
   const pendingEdge = useMemo(() => {
     if (!pending) return null;
     const from = game.pawns[game.turn]?.node;
     if (from == null) return null;
-    const a = nodeById(from);
-    const b = nodeById(pending.to);
-    return { a, b };
+    return { a: nodeById(from), b: nodeById(pending.to) };
   }, [pending, game]);
 
   return (
@@ -101,44 +118,159 @@ export function BoardCanvas() {
         onPointerLeave={endDrag}
         style={{ cursor: grabbing ? "grabbing" : "grab" }}
       >
-        <rect x={-2000} y={-2000} width={6000} height={6000} fill="var(--game-canvas)" />
-        <g transform={`translate(${tx} ${ty}) scale(${k})`}>
-          {/* river band */}
-          <path
-            d={BOARD.riverPath}
-            fill="none"
-            stroke="var(--game-water)"
-            strokeWidth={46}
-            strokeLinecap="round"
-            opacity={0.9}
-          />
+        <defs>
+          <radialGradient id="fv-ground" cx="42%" cy="34%" r="90%">
+            <stop offset="0%" stopColor="#141b26" />
+            <stop offset="55%" stopColor="#0f1520" />
+            <stop offset="100%" stopColor="#090c12" />
+          </radialGradient>
+        </defs>
 
-          {/* edges, painted auto → bus → river → metro */}
-          {(["auto", "bus", "river", "metro"] as const).map((mode) => (
-            <g key={mode}>
-              {BOARD.edges
-                .filter((e) => e.mode === mode)
-                .map((e, i) => {
-                  const a = nodeById(e.a);
-                  const b = nodeById(e.b);
-                  const st = EDGE_STYLE[mode];
-                  return (
-                    <line
-                      key={i}
-                      x1={a.x}
-                      y1={a.y}
-                      x2={b.x}
-                      y2={b.y}
-                      stroke={st.stroke}
-                      strokeWidth={st.width}
-                      strokeDasharray={st.dash}
-                      strokeLinecap="round"
-                      opacity={st.opacity}
-                    />
-                  );
-                })}
+        <rect x={-3000} y={-3000} width={9000} height={9000} fill="#090c12" />
+
+        <g transform={`translate(${tx} ${ty}) scale(${k})`}>
+          <rect x={0} y={0} width={BOARD.width} height={BOARD.height} fill="url(#fv-ground)" />
+
+          {/* water — bay + rivers */}
+          <path d={BOARD.coastPath} fill="var(--game-water)" />
+          <path
+            d={BOARD.coastPath}
+            fill="none"
+            stroke="#3f7fb0"
+            strokeWidth={2}
+            opacity={0.5}
+          />
+          {BOARD.riverPaths.map((d, i) => (
+            <g key={i}>
+              <path
+                d={d}
+                fill="none"
+                stroke="var(--game-water)"
+                strokeWidth={40}
+                strokeLinecap="round"
+              />
+              <path
+                d={d}
+                fill="none"
+                stroke="#2f6c9a"
+                strokeWidth={40}
+                strokeLinecap="round"
+                opacity={0.35}
+              />
             </g>
           ))}
+
+          {/* parks */}
+          {BOARD.parks.map((d, i) => (
+            <path key={i} d={d} fill="#16241c" stroke="#20362a" strokeWidth={2} />
+          ))}
+
+          {/* faint street underlay for a city texture */}
+          <g stroke="#3a4658" strokeWidth={5} strokeLinecap="round" opacity={0.22}>
+            {autoEdges.map((e, i) => {
+              const [a, b] = [nodeById(e.a), nodeById(e.b)];
+              return <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} />;
+            })}
+          </g>
+
+          {/* glow bloom under the lit routes */}
+          <g strokeLinecap="round" opacity={0.28}>
+            {autoEdges.map((e, i) => {
+              const [a, b] = [nodeById(e.a), nodeById(e.b)];
+              return (
+                <line
+                  key={i}
+                  x1={a.x}
+                  y1={a.y}
+                  x2={b.x}
+                  y2={b.y}
+                  stroke="var(--t-auto)"
+                  strokeWidth={9}
+                />
+              );
+            })}
+            {busEdges.map((e, i) => (
+              <polyline
+                key={i}
+                points={toPoly(edgePoints(e))}
+                fill="none"
+                stroke="var(--t-bus)"
+                strokeWidth={13}
+              />
+            ))}
+            {metroEdges.map((e, i) => {
+              const [a, b] = [nodeById(e.a), nodeById(e.b)];
+              return (
+                <line
+                  key={i}
+                  x1={a.x}
+                  y1={a.y}
+                  x2={b.x}
+                  y2={b.y}
+                  stroke="var(--t-metro)"
+                  strokeWidth={11}
+                />
+              );
+            })}
+          </g>
+
+          {/* crisp lit routes */}
+          <g strokeLinecap="round" strokeLinejoin="round">
+            {autoEdges.map((e, i) => {
+              const [a, b] = [nodeById(e.a), nodeById(e.b)];
+              return (
+                <line
+                  key={i}
+                  x1={a.x}
+                  y1={a.y}
+                  x2={b.x}
+                  y2={b.y}
+                  stroke="var(--t-auto)"
+                  strokeWidth={2.4}
+                  opacity={0.9}
+                />
+              );
+            })}
+            {busEdges.map((e, i) => (
+              <polyline
+                key={i}
+                points={toPoly(edgePoints(e))}
+                fill="none"
+                stroke="var(--t-bus)"
+                strokeWidth={4.5}
+              />
+            ))}
+            {metroEdges.map((e, i) => {
+              const [a, b] = [nodeById(e.a), nodeById(e.b)];
+              return (
+                <line
+                  key={i}
+                  x1={a.x}
+                  y1={a.y}
+                  x2={b.x}
+                  y2={b.y}
+                  stroke="var(--t-metro)"
+                  strokeWidth={3.6}
+                  strokeDasharray="2 8"
+                />
+              );
+            })}
+            {riverEdges.map((e, i) => {
+              const [a, b] = [nodeById(e.a), nodeById(e.b)];
+              return (
+                <line
+                  key={i}
+                  x1={a.x}
+                  y1={a.y}
+                  x2={b.x}
+                  y2={b.y}
+                  stroke="var(--t-river)"
+                  strokeWidth={3.4}
+                  strokeDasharray="12 9"
+                />
+              );
+            })}
+          </g>
 
           {pendingEdge && (
             <line
@@ -152,11 +284,10 @@ export function BoardCanvas() {
             />
           )}
 
-          {/* last-known Vedha marker (Detective view) */}
           {viewAs === "detective" && lastKnown != null && !vedhaVisible && (
             <g transform={`translate(${nodeById(lastKnown).x} ${nodeById(lastKnown).y})`}>
               <circle
-                r={26}
+                r={30}
                 fill="none"
                 stroke="var(--reveal)"
                 strokeWidth={2}
@@ -164,9 +295,9 @@ export function BoardCanvas() {
                 opacity={0.8}
               />
               <text
-                y={-34}
+                y={-40}
                 textAnchor="middle"
-                fontSize={11}
+                fontSize={13}
                 fontFamily="var(--font-mono)"
                 fill="var(--reveal)"
               >
@@ -185,7 +316,13 @@ export function BoardCanvas() {
                 node={n}
                 state={isPending ? "selected" : isLegal ? "legal" : "idle"}
                 dim={myTurn}
-                onClick={isLegal ? () => pickNode(n.id) : undefined}
+                onClick={
+                  isLegal
+                    ? () => {
+                        if (!moved.current) pickNode(n.id);
+                      }
+                    : undefined
+                }
               />
             );
           })}
@@ -195,11 +332,11 @@ export function BoardCanvas() {
             const n = nodeById(p.node);
             return (
               <g key={p.id} transform={`translate(${n.x} ${n.y})`}>
-                <line x1={0} y1={-2} x2={0} y2={-30} stroke={`var(${p.varName})`} strokeWidth={2.5} />
+                <line x1={0} y1={-2} x2={0} y2={-34} stroke={`var(${p.varName})`} strokeWidth={3} />
                 <circle
                   cx={0}
-                  cy={-38}
-                  r={12}
+                  cy={-44}
+                  r={13}
                   fill={`var(${p.varName})`}
                   stroke="#fff"
                   strokeWidth={2}
@@ -207,10 +344,10 @@ export function BoardCanvas() {
                 />
                 <text
                   x={0}
-                  y={-38}
+                  y={-44}
                   textAnchor="middle"
                   dominantBaseline="central"
-                  fontSize={10}
+                  fontSize={11}
                   fontWeight={700}
                   fontFamily="var(--font-mono)"
                   fill="#0b0f14"
@@ -224,21 +361,21 @@ export function BoardCanvas() {
           {/* Vedha pin */}
           {vedhaVisible && (
             <g transform={`translate(${nodeById(game.pawns.vedha.node).x} ${nodeById(game.pawns.vedha.node).y})`}>
-              <line x1={0} y1={-2} x2={0} y2={-32} stroke="var(--signal)" strokeWidth={2.5} />
+              <line x1={0} y1={-2} x2={0} y2={-36} stroke="var(--signal)" strokeWidth={3} />
               <circle
                 cx={0}
-                cy={-42}
-                r={13}
+                cy={-46}
+                r={14}
                 fill="var(--signal)"
                 stroke="var(--reveal)"
                 strokeWidth={3}
               />
               <text
                 x={0}
-                y={-42}
+                y={-46}
                 textAnchor="middle"
                 dominantBaseline="central"
-                fontSize={12}
+                fontSize={13}
                 fontWeight={800}
                 fontFamily="var(--font-display)"
                 fill="var(--signal-ink)"
@@ -250,18 +387,17 @@ export function BoardCanvas() {
         </g>
       </svg>
 
-      {/* zoom controls */}
       <div className="absolute bottom-3 right-3 flex flex-col gap-1 rounded-md border border-line bg-surface/90 p-1 backdrop-blur">
         <button
           aria-label="Zoom in"
-          onClick={() => setK((v) => Math.min(3.6, v * 1.2))}
+          onClick={() => setK((v) => Math.min(K_MAX, v * 1.25))}
           className="grid h-8 w-8 place-items-center rounded text-muted hover:bg-surface-2 hover:text-text"
         >
           <Plus size={15} />
         </button>
         <button
           aria-label="Zoom out"
-          onClick={() => setK((v) => Math.max(0.6, v / 1.2))}
+          onClick={() => setK((v) => Math.max(K_MIN, v / 1.25))}
           className="grid h-8 w-8 place-items-center rounded text-muted hover:bg-surface-2 hover:text-text"
         >
           <Minus size={15} />
@@ -275,7 +411,6 @@ export function BoardCanvas() {
         </button>
       </div>
 
-      {/* legend */}
       <div className="absolute bottom-3 left-3 flex flex-wrap gap-x-3 gap-y-1 rounded-md border border-line bg-surface/90 px-3 py-2 text-[0.6875rem] text-muted backdrop-blur">
         <Legend swatch="var(--t-auto)" label="Auto" />
         <Legend swatch="var(--t-bus)" label="Bus" />
