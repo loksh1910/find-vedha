@@ -40,6 +40,8 @@ export type Board = {
   riverPaths: string[];
   coastPath: string;
   parks: string[];
+  /** decorative building footprints (SVG path `d` strings) — no gameplay role */
+  buildings: string[];
 };
 
 const W = 2200;
@@ -660,12 +662,82 @@ function build(): Board {
   const toPath = (poly: P[]) =>
     poly.map((p, i) => `${i ? "L" : "M"} ${p.x.toFixed(0)} ${p.y.toFixed(0)}`).join(" ");
 
+  /* ----- decorative building footprints in the block interiors ----- */
+  const roadSegList = autoEdges.map((e) => [XY(e.a), XY(e.b)] as [P, P]);
+  const distToSeg = (p: P, a: P, b: P) => {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const l2 = dx * dx + dy * dy || 1;
+    let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2;
+    t = Math.max(0, Math.min(1, t));
+    return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+  };
+  const rectPath = (cx: number, cy: number, w: number, h: number, ang: number) => {
+    const c = Math.cos(ang);
+    const s = Math.sin(ang);
+    const cs = [
+      [-w / 2, -h / 2],
+      [w / 2, -h / 2],
+      [w / 2, h / 2],
+      [-w / 2, h / 2],
+    ].map(([x, y]) => [cx + x * c - y * s, cy + x * s + y * c]);
+    return `M ${cs.map((p, i) => `${i ? "L" : ""}${p[0].toFixed(0)} ${p[1].toFixed(0)}`).join(" ")} Z`;
+  };
+  const brand = rngFactory(31337);
+  const buildings: string[] = [];
+  for (let gy = 40; gy < H - 30; gy += 44) {
+    for (let gx = 40; gx < W - 30; gx += 44) {
+      const p = { x: gx + (brand() - 0.5) * 30, y: gy + (brand() - 0.5) * 30 };
+      if (p.x > coastX(p.y) - 24) continue;
+      if (distToPolyline(p, RIVER_A) < 42 || distToPolyline(p, RIVER_B) < 40) continue;
+      let skip = false;
+      for (const k of PARKS)
+        if (((p.x - k.cx) / (k.rx - 8)) ** 2 + ((p.y - k.cy) / (k.ry - 8)) ** 2 < 1) skip = true;
+      if (skip) continue;
+      // nearest road: distance + heading
+      let rd = Infinity;
+      let rang = 0;
+      for (const [a, b] of roadSegList) {
+        const d = distToSeg(p, a, b);
+        if (d < rd) {
+          rd = d;
+          rang = Math.atan2(b.y - a.y, b.x - a.x);
+        }
+      }
+      if (rd < 19 || rd > 60) continue; // block interior only
+      let nearNode = false;
+      for (const n of nodes) if (dist2(p, n) < 26 * 26) nearNode = true;
+      if (nearNode) continue;
+
+      const ang = rang + (brand() - 0.5) * 0.3;
+      const w = 20 + brand() * 42;
+      const h = 18 + brand() * 32;
+      buildings.push(rectPath(p.x, p.y, w, h, ang));
+      if (brand() > 0.5) {
+        // an L / T wing
+        const w2 = 12 + brand() * 22;
+        const h2 = 12 + brand() * 22;
+        const dir = brand() > 0.5 ? 1 : -1;
+        buildings.push(
+          rectPath(
+            p.x + Math.cos(ang) * (w / 2) * dir + Math.cos(ang + Math.PI / 2) * (h / 4),
+            p.y + Math.sin(ang) * (w / 2) * dir + Math.sin(ang + Math.PI / 2) * (h / 4),
+            w2,
+            h2,
+            ang,
+          ),
+        );
+      }
+    }
+  }
+
   return {
     nodes,
     edges,
     width: W,
     height: H,
     startNodes,
+    buildings,
     riverPaths: [toPath(RIVER_A), toPath(RIVER_B)],
     coastPath: `M ${W} 0 L ${W} ${H} ${polyline((t) => ({ x: coastX(H * (1 - t)), y: H * (1 - t) }), 40)
       .map((p) => `L ${p.x.toFixed(0)} ${p.y.toFixed(0)}`)

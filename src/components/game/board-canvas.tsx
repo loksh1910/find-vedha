@@ -148,6 +148,15 @@ export function BoardCanvas() {
             <path key={i} d={d} fill="#15231b" stroke="#1f3529" strokeWidth={2} />
           ))}
 
+          {/* decorative building footprints (block interiors, behind the roads) */}
+          <path
+            d={BOARD.buildings.join(" ")}
+            fill="#1a2029"
+            stroke="#252d39"
+            strokeWidth={1.25}
+            fillRule="evenodd"
+          />
+
           {/* ---- grey road network (one substrate; every route rides these) ---- */}
           <g strokeLinecap="round">
             {roads.map((r, i) => {
