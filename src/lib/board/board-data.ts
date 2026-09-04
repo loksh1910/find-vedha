@@ -722,57 +722,68 @@ function build(): Board {
     return `${pts.join(" ")} Z`;
   };
 
-  const BUILDING_GAP = 1.4;
-  for (let gy = 18; gy < H - 14; gy += 23) {
-    for (let gx = 18; gx < W - 14; gx += 23) {
-      const p = { x: gx + (brand() - 0.5) * 17, y: gy + (brand() - 0.5) * 17 };
-      if (p.x > coastX(p.y) - 20) continue;
-      if (distToPolyline(p, RIVER_A) < 40 || distToPolyline(p, RIVER_B) < 38) continue;
-      let skip = false;
-      for (const k of PARKS)
-        if (((p.x - k.cx) / (k.rx - 6)) ** 2 + ((p.y - k.cy) / (k.ry - 6)) ** 2 < 1) skip = true;
-      if (skip) continue;
-      // nearest road: distance + heading — buildings mostly face their street
-      let rd = Infinity;
-      let rang = 0;
-      for (const [a, b] of roadSegList) {
-        const d = distToSeg(p, a, b);
-        if (d < rd) {
-          rd = d;
-          rang = Math.atan2(b.y - a.y, b.x - a.x);
+  // buildings hug the street: walk each road's length and drop a row of lots
+  // right against both sides, frontage-narrow / depth-deep like real terraces,
+  // instead of scattering points freely through the block interior.
+  const ROAD_HALF = 8;
+  const ROW_GAP = 3;
+  const BUILDING_GAP = 1.2;
+  const blocked = (x: number, y: number) => {
+    if (x > coastX(y) - 8) return true;
+    if (distToPolyline({ x, y }, RIVER_A) < 30 || distToPolyline({ x, y }, RIVER_B) < 28) return true;
+    for (const k of PARKS)
+      if (((x - k.cx) / (k.rx - 2)) ** 2 + ((y - k.cy) / (k.ry - 2)) ** 2 < 1) return true;
+    for (const n of nodes) if (dist2({ x, y }, n) < 20 * 20) return true;
+    for (const [a, b] of roadSegList) if (distToSeg({ x, y }, a, b) < ROAD_HALF + 2) return true;
+    return false;
+  };
+
+  for (const [a, b] of roadSegList) {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.hypot(dx, dy);
+    if (len < 1) continue;
+    const ang = Math.atan2(dy, dx);
+    const ux = dx / len;
+    const uy = dy / len;
+    const nx = -uy;
+    const ny = ux;
+    const MARGIN = 16;
+    const STEP = 15;
+
+    for (let t = MARGIN; t < len - MARGIN; t += STEP + (brand() - 0.5) * 4) {
+      const rx = a.x + ux * t;
+      const ry = a.y + uy * t;
+      const frontage = STEP - 3 - brand() * 3;
+
+      for (const side of [1, -1]) {
+        const rows = brand() < 0.55 ? 2 : 1; // usually one row deep, sometimes two
+        let offset = ROAD_HALF + ROW_GAP;
+        for (let row = 0; row < rows; row++) {
+          const depth = 11 + brand() * 9;
+          const cx = rx + side * (offset + depth / 2) * nx;
+          const cy = ry + side * (offset + depth / 2) * ny;
+          if (blocked(cx, cy)) break; // this row (and any deeper) is off the buildable strip
+
+          const r = Math.hypot(frontage, depth) / 2 + BUILDING_GAP;
+          if (!overlapsPlaced(cx, cy, r)) {
+            const roll = brand();
+            let d: string;
+            if (roll < 0.72) {
+              d = rectPath(cx, cy, frontage, depth, ang);
+            } else if (roll < 0.85) {
+              d = polyPath(cx, cy, 5, Math.min(frontage, depth) * 0.62, ang, 0.22); // pentagon
+            } else if (roll < 0.95) {
+              d = polyPath(cx, cy, 12, Math.min(frontage, depth) * 0.55, ang, 0.12); // circle-ish
+            } else {
+              d = polyPath(cx, cy, brand() < 0.5 ? 6 : 7, Math.min(frontage, depth) * 0.6, ang, 0.32); // blob
+            }
+            addPlaced(cx, cy, r);
+            buildings.push(d);
+          }
+          offset += depth + ROW_GAP;
         }
       }
-      if (rd < 15 || rd > 110) continue; // clear of the road, but reach deep into big blocks too
-      let nearNode = false;
-      for (const n of nodes) if (dist2(p, n) < 22 * 22) nearNode = true;
-      if (nearNode) continue;
-
-      const ang = rang + (brand() - 0.5) * 0.5;
-      const roll = brand();
-      let d: string;
-      let r: number;
-      if (roll < 0.4) {
-        const w = 9 + brand() * 10;
-        const h = 8 + brand() * 8;
-        d = rectPath(p.x, p.y, w, h, ang);
-        r = Math.hypot(w, h) / 2;
-      } else if (roll < 0.62) {
-        const baseR = 6 + brand() * 4.5;
-        d = polyPath(p.x, p.y, 5, baseR, ang, 0.25); // pentagon
-        r = baseR * 1.15;
-      } else if (roll < 0.82) {
-        const baseR = 5.5 + brand() * 4;
-        d = polyPath(p.x, p.y, 12, baseR, ang, 0.12); // circle-ish
-        r = baseR * 1.1;
-      } else {
-        const baseR = 6 + brand() * 4.5;
-        d = polyPath(p.x, p.y, brand() < 0.5 ? 6 : 7, baseR, ang, 0.35); // irregular blob
-        r = baseR * 1.2;
-      }
-      const rr = r + BUILDING_GAP;
-      if (overlapsPlaced(p.x, p.y, rr)) continue;
-      addPlaced(p.x, p.y, rr);
-      buildings.push(d);
     }
   }
 
