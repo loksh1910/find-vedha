@@ -178,10 +178,10 @@ export function BoardCanvas() {
           ))}
 
           {/* decorative building footprints (block interiors, behind the roads) —
-               real city blocks split into several lots, non-overlapping, muted blue */}
-          <g opacity={0.62}>
+               small, densely scattered, mixed shapes, non-overlapping, muted blue */}
+          <g opacity={0.42}>
             {BOARD.buildings.map((d, i) => (
-              <path key={i} d={d} fill="#6f93cf" stroke="#33517f" strokeWidth={1.1} />
+              <path key={i} d={d} fill="#6f93cf" stroke="#33517f" strokeWidth={0.8} />
             ))}
           </g>
 

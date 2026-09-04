@@ -685,51 +685,54 @@ function build(): Board {
   };
   const brand = rngFactory(31337);
   const buildings: string[] = [];
-  // reject any candidate block whose (conservative, circular) footprint would
-  // overlap one already placed — distinct blocks instead of a jumble
-  const placed: { x: number; y: number; r: number }[] = [];
-  const BUILDING_GAP = 4;
-  const overlapsPlaced = (x: number, y: number, r: number) =>
-    placed.some((q) => (x - q.x) ** 2 + (y - q.y) ** 2 < (r + q.r) ** 2);
 
-  // a real city block isn't one rectangle — it's several separate plots built
-  // out side by side. Recursively slice one block footprint into a handful of
-  // adjacent lots (local, unrotated coords), each with a thin seam around it.
-  type Lot = { x: number; y: number; w: number; h: number };
-  const LOT_SEAM = 3;
-  const MIN_LOT = 13;
-  const splitBlock = (x: number, y: number, w: number, h: number, depth: number, out: Lot[]) => {
-    const canW = w > MIN_LOT * 2 + LOT_SEAM;
-    const canH = h > MIN_LOT * 2 + LOT_SEAM;
-    if (depth <= 0 || (!canW && !canH) || brand() < 0.3) {
-      out.push({ x, y, w, h });
-      return;
-    }
-    const vertical = canW && (!canH || w >= h);
-    const cut = 0.35 + brand() * 0.3;
-    if (vertical) {
-      const w1 = w * cut - LOT_SEAM / 2;
-      const w2 = w * (1 - cut) - LOT_SEAM / 2;
-      splitBlock(x - w / 2 + w1 / 2, y, w1, h, depth - 1, out);
-      splitBlock(x + w / 2 - w2 / 2, y, w2, h, depth - 1, out);
-    } else {
-      const h1 = h * cut - LOT_SEAM / 2;
-      const h2 = h * (1 - cut) - LOT_SEAM / 2;
-      splitBlock(x, y - h / 2 + h1 / 2, w, h1, depth - 1, out);
-      splitBlock(x, y + h / 2 - h2 / 2, w, h2, depth - 1, out);
-    }
+  // small footprints, packed densely — spatial-hash the accepted ones so
+  // checking a candidate against its neighbours stays cheap even at a few
+  // thousand buildings (a plain global scan would be O(n^2))
+  const CELL = 36;
+  const cellKey = (x: number, y: number) => `${Math.floor(x / CELL)}_${Math.floor(y / CELL)}`;
+  const byCell = new Map<string, { x: number; y: number; r: number }[]>();
+  const overlapsPlaced = (x: number, y: number, r: number) => {
+    const cx = Math.floor(x / CELL);
+    const cy = Math.floor(y / CELL);
+    for (let dy = -1; dy <= 1; dy++)
+      for (let dx = -1; dx <= 1; dx++) {
+        const bucket = byCell.get(`${cx + dx}_${cy + dy}`);
+        if (!bucket) continue;
+        for (const q of bucket) if ((x - q.x) ** 2 + (y - q.y) ** 2 < (r + q.r) ** 2) return true;
+      }
+    return false;
+  };
+  const addPlaced = (x: number, y: number, r: number) => {
+    const k = cellKey(x, y);
+    const bucket = byCell.get(k);
+    if (bucket) bucket.push({ x, y, r });
+    else byCell.set(k, [{ x, y, r }]);
   };
 
-  for (let gy = 44; gy < H - 40; gy += 58) {
-    for (let gx = 44; gx < W - 40; gx += 58) {
-      const p = { x: gx + (brand() - 0.5) * 34, y: gy + (brand() - 0.5) * 34 };
-      if (p.x > coastX(p.y) - 24) continue;
-      if (distToPolyline(p, RIVER_A) < 42 || distToPolyline(p, RIVER_B) < 40) continue;
+  // an irregular convex-ish polygon — sides=4-ish reads as a blocky footprint,
+  // more sides + low irregularity reads as a rounded one (our "circle")
+  const polyPath = (cx: number, cy: number, sides: number, baseR: number, ang: number, irregularity: number) => {
+    const pts: string[] = [];
+    for (let i = 0; i < sides; i++) {
+      const a = ang + (i / sides) * Math.PI * 2 + (brand() - 0.5) * ((Math.PI * 2) / sides) * irregularity * 0.5;
+      const rr = baseR * (1 - irregularity * 0.3 + brand() * irregularity * 0.6);
+      pts.push(`${i ? "L" : "M"} ${(cx + Math.cos(a) * rr).toFixed(1)} ${(cy + Math.sin(a) * rr).toFixed(1)}`);
+    }
+    return `${pts.join(" ")} Z`;
+  };
+
+  const BUILDING_GAP = 1.4;
+  for (let gy = 18; gy < H - 14; gy += 23) {
+    for (let gx = 18; gx < W - 14; gx += 23) {
+      const p = { x: gx + (brand() - 0.5) * 17, y: gy + (brand() - 0.5) * 17 };
+      if (p.x > coastX(p.y) - 20) continue;
+      if (distToPolyline(p, RIVER_A) < 40 || distToPolyline(p, RIVER_B) < 38) continue;
       let skip = false;
       for (const k of PARKS)
-        if (((p.x - k.cx) / (k.rx - 8)) ** 2 + ((p.y - k.cy) / (k.ry - 8)) ** 2 < 1) skip = true;
+        if (((p.x - k.cx) / (k.rx - 6)) ** 2 + ((p.y - k.cy) / (k.ry - 6)) ** 2 < 1) skip = true;
       if (skip) continue;
-      // nearest road: distance + heading — a block sits parallel to its street
+      // nearest road: distance + heading — buildings mostly face their street
       let rd = Infinity;
       let rang = 0;
       for (const [a, b] of roadSegList) {
@@ -739,27 +742,37 @@ function build(): Board {
           rang = Math.atan2(b.y - a.y, b.x - a.x);
         }
       }
-      if (rd < 19 || rd > 62) continue; // block interior only
+      if (rd < 15 || rd > 110) continue; // clear of the road, but reach deep into big blocks too
       let nearNode = false;
-      for (const n of nodes) if (dist2(p, n) < 26 * 26) nearNode = true;
+      for (const n of nodes) if (dist2(p, n) < 22 * 22) nearNode = true;
       if (nearNode) continue;
 
-      const ang = rang + (brand() - 0.5) * 0.25;
-      const bw = 34 + brand() * 34;
-      const bh = 26 + brand() * 26;
-      const r = Math.hypot(bw, bh) / 2 + BUILDING_GAP;
-      if (overlapsPlaced(p.x, p.y, r)) continue;
-      placed.push({ x: p.x, y: p.y, r });
-
-      const lots: Lot[] = [];
-      splitBlock(0, 0, bw, bh, brand() < 0.4 ? 3 : 2, lots);
-      const c = Math.cos(ang);
-      const s = Math.sin(ang);
-      for (const lot of lots) {
-        const wx = p.x + lot.x * c - lot.y * s;
-        const wy = p.y + lot.x * s + lot.y * c;
-        buildings.push(rectPath(wx, wy, Math.max(8, lot.w - 1.5), Math.max(8, lot.h - 1.5), ang));
+      const ang = rang + (brand() - 0.5) * 0.5;
+      const roll = brand();
+      let d: string;
+      let r: number;
+      if (roll < 0.4) {
+        const w = 9 + brand() * 10;
+        const h = 8 + brand() * 8;
+        d = rectPath(p.x, p.y, w, h, ang);
+        r = Math.hypot(w, h) / 2;
+      } else if (roll < 0.62) {
+        const baseR = 6 + brand() * 4.5;
+        d = polyPath(p.x, p.y, 5, baseR, ang, 0.25); // pentagon
+        r = baseR * 1.15;
+      } else if (roll < 0.82) {
+        const baseR = 5.5 + brand() * 4;
+        d = polyPath(p.x, p.y, 12, baseR, ang, 0.12); // circle-ish
+        r = baseR * 1.1;
+      } else {
+        const baseR = 6 + brand() * 4.5;
+        d = polyPath(p.x, p.y, brand() < 0.5 ? 6 : 7, baseR, ang, 0.35); // irregular blob
+        r = baseR * 1.2;
       }
+      const rr = r + BUILDING_GAP;
+      if (overlapsPlaced(p.x, p.y, rr)) continue;
+      addPlaced(p.x, p.y, rr);
+      buildings.push(d);
     }
   }
 
