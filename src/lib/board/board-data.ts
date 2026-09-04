@@ -685,23 +685,51 @@ function build(): Board {
   };
   const brand = rngFactory(31337);
   const buildings: string[] = [];
-  // reject any candidate whose (conservative, circular) footprint would overlap
-  // one already placed — real, distinct building blocks instead of a jumble
+  // reject any candidate block whose (conservative, circular) footprint would
+  // overlap one already placed — distinct blocks instead of a jumble
   const placed: { x: number; y: number; r: number }[] = [];
-  const BUILDING_GAP = 3;
+  const BUILDING_GAP = 4;
   const overlapsPlaced = (x: number, y: number, r: number) =>
     placed.some((q) => (x - q.x) ** 2 + (y - q.y) ** 2 < (r + q.r) ** 2);
 
-  for (let gy = 40; gy < H - 30; gy += 44) {
-    for (let gx = 40; gx < W - 30; gx += 44) {
-      const p = { x: gx + (brand() - 0.5) * 30, y: gy + (brand() - 0.5) * 30 };
+  // a real city block isn't one rectangle — it's several separate plots built
+  // out side by side. Recursively slice one block footprint into a handful of
+  // adjacent lots (local, unrotated coords), each with a thin seam around it.
+  type Lot = { x: number; y: number; w: number; h: number };
+  const LOT_SEAM = 3;
+  const MIN_LOT = 13;
+  const splitBlock = (x: number, y: number, w: number, h: number, depth: number, out: Lot[]) => {
+    const canW = w > MIN_LOT * 2 + LOT_SEAM;
+    const canH = h > MIN_LOT * 2 + LOT_SEAM;
+    if (depth <= 0 || (!canW && !canH) || brand() < 0.3) {
+      out.push({ x, y, w, h });
+      return;
+    }
+    const vertical = canW && (!canH || w >= h);
+    const cut = 0.35 + brand() * 0.3;
+    if (vertical) {
+      const w1 = w * cut - LOT_SEAM / 2;
+      const w2 = w * (1 - cut) - LOT_SEAM / 2;
+      splitBlock(x - w / 2 + w1 / 2, y, w1, h, depth - 1, out);
+      splitBlock(x + w / 2 - w2 / 2, y, w2, h, depth - 1, out);
+    } else {
+      const h1 = h * cut - LOT_SEAM / 2;
+      const h2 = h * (1 - cut) - LOT_SEAM / 2;
+      splitBlock(x, y - h / 2 + h1 / 2, w, h1, depth - 1, out);
+      splitBlock(x, y + h / 2 - h2 / 2, w, h2, depth - 1, out);
+    }
+  };
+
+  for (let gy = 44; gy < H - 40; gy += 58) {
+    for (let gx = 44; gx < W - 40; gx += 58) {
+      const p = { x: gx + (brand() - 0.5) * 34, y: gy + (brand() - 0.5) * 34 };
       if (p.x > coastX(p.y) - 24) continue;
       if (distToPolyline(p, RIVER_A) < 42 || distToPolyline(p, RIVER_B) < 40) continue;
       let skip = false;
       for (const k of PARKS)
         if (((p.x - k.cx) / (k.rx - 8)) ** 2 + ((p.y - k.cy) / (k.ry - 8)) ** 2 < 1) skip = true;
       if (skip) continue;
-      // nearest road: distance + heading
+      // nearest road: distance + heading — a block sits parallel to its street
       let rd = Infinity;
       let rang = 0;
       for (const [a, b] of roadSegList) {
@@ -711,31 +739,26 @@ function build(): Board {
           rang = Math.atan2(b.y - a.y, b.x - a.x);
         }
       }
-      if (rd < 19 || rd > 60) continue; // block interior only
+      if (rd < 19 || rd > 62) continue; // block interior only
       let nearNode = false;
       for (const n of nodes) if (dist2(p, n) < 26 * 26) nearNode = true;
       if (nearNode) continue;
 
-      const ang = rang + (brand() - 0.5) * 0.3;
-      const w = 16 + brand() * 20;
-      const h = 14 + brand() * 16;
-      const r = Math.hypot(w, h) / 2 + BUILDING_GAP;
+      const ang = rang + (brand() - 0.5) * 0.25;
+      const bw = 34 + brand() * 34;
+      const bh = 26 + brand() * 26;
+      const r = Math.hypot(bw, bh) / 2 + BUILDING_GAP;
       if (overlapsPlaced(p.x, p.y, r)) continue;
-      buildings.push(rectPath(p.x, p.y, w, h, ang));
       placed.push({ x: p.x, y: p.y, r });
 
-      if (brand() > 0.5) {
-        // an L / T wing
-        const w2 = 10 + brand() * 14;
-        const h2 = 10 + brand() * 14;
-        const dir = brand() > 0.5 ? 1 : -1;
-        const wx = p.x + Math.cos(ang) * (w / 2) * dir + Math.cos(ang + Math.PI / 2) * (h / 4);
-        const wy = p.y + Math.sin(ang) * (w / 2) * dir + Math.sin(ang + Math.PI / 2) * (h / 4);
-        const wr = Math.hypot(w2, h2) / 2 + BUILDING_GAP;
-        if (!overlapsPlaced(wx, wy, wr)) {
-          buildings.push(rectPath(wx, wy, w2, h2, ang));
-          placed.push({ x: wx, y: wy, r: wr });
-        }
+      const lots: Lot[] = [];
+      splitBlock(0, 0, bw, bh, brand() < 0.4 ? 3 : 2, lots);
+      const c = Math.cos(ang);
+      const s = Math.sin(ang);
+      for (const lot of lots) {
+        const wx = p.x + lot.x * c - lot.y * s;
+        const wy = p.y + lot.x * s + lot.y * c;
+        buildings.push(rectPath(wx, wy, Math.max(8, lot.w - 1.5), Math.max(8, lot.h - 1.5), ang));
       }
     }
   }
