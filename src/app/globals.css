@@ -8,13 +8,13 @@
 :root {
   color-scheme: dark;
 
-  /* neutrals / surfaces — bg/line stay blue-slate; surface is near-black grey */
-  --bg: #161b22;
-  --bg-inset: #12161c;
+  /* neutrals / surfaces — near-black grey ramp, no blue tint */
+  --bg: #131313;
+  --bg-inset: #101010;
   --surface: #151515;
-  --surface-2: #232c38;
-  --line: #2e3945;
-  --line-strong: #3b4855;
+  --surface-2: #1f1f1f;
+  --line: #2a2a2a;
+  --line-strong: #363636;
 
   /* text */
   --text: #e7edf4;
