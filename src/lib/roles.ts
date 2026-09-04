@@ -24,7 +24,7 @@ export const HEX = {
   danger: "#e5657b",
   line: "#2e3945",
   lineStrong: "#3b4855",
-  surface: "#1c232d",
+  surface: "#151515",
   muted: "#9ba8b5",
   faint: "#6a7683",
   tAuto: "#e6b12e",

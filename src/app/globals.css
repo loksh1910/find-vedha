@@ -8,10 +8,10 @@
 :root {
   color-scheme: dark;
 
-  /* neutrals / surfaces — soft blue-slate, never pure black */
+  /* neutrals / surfaces — bg/line stay blue-slate; surface is near-black grey */
   --bg: #161b22;
   --bg-inset: #12161c;
-  --surface: #1c232d;
+  --surface: #151515;
   --surface-2: #232c38;
   --line: #2e3945;
   --line-strong: #3b4855;
