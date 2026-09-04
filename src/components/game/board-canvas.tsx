@@ -191,73 +191,62 @@ export function BoardCanvas() {
             {roads.map((r, i) => {
               const a = nodeById(r.a);
               const b = nodeById(r.b);
-              return <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#3b434f" strokeWidth={16} />;
+              return <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#232a33" strokeWidth={17} />;
             })}
           </g>
           <g strokeLinecap="round">
             {roads.map((r, i) => {
               const a = nodeById(r.a);
               const b = nodeById(r.b);
-              return <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#4d5766" strokeWidth={11} />;
+              return <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#525d6c" strokeWidth={12} />;
             })}
           </g>
 
-          {/* ---- route stripes, all on the same roads ---- */}
-          {/* faint glow */}
-          <g strokeLinecap="round" opacity={0.22}>
-            {roads.map((r, i) => {
-              const a = nodeById(r.a);
-              const b = nodeById(r.b);
-              return <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="var(--t-auto)" strokeWidth={7} />;
-            })}
-          </g>
+          {/* ---- route stripes, all on the same roads — each gets a crisp dark
+               edge (not a soft glow) so the colour reads clean at any zoom ---- */}
           {/* auto — every road, centred */}
           <g strokeLinecap="round">
             {roads.map((r, i) => {
               const a = nodeById(r.a);
               const b = nodeById(r.b);
               return (
-                <line
-                  key={i}
-                  x1={a.x}
-                  y1={a.y}
-                  x2={b.x}
-                  y2={b.y}
-                  stroke="var(--t-auto)"
-                  strokeWidth={2.6}
-                  opacity={0.92}
-                />
+                <g key={i}>
+                  <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="rgba(6,9,13,0.55)" strokeWidth={4.6} />
+                  <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="var(--t-auto)" strokeWidth={3.2} />
+                </g>
               );
             })}
           </g>
-          {/* bus — rides the roads between stops, offset +4 */}
+          {/* bus — rides the roads between stops, offset +6 */}
           <g strokeLinecap="round">
             {busEdges.map((e, ei) => {
               const p = e.path ?? [e.a, e.b];
               return p.slice(1).map((_, si) => {
                 const a = nodeById(p[si]);
                 const b = nodeById(p[si + 1]);
-                const s = off(a.x, a.y, b.x, b.y, 4);
-                return <line key={`${ei}-${si}`} {...s} stroke="var(--t-bus)" strokeWidth={2.8} />;
+                const s = off(a.x, a.y, b.x, b.y, 5.5);
+                return (
+                  <g key={`${ei}-${si}`}>
+                    <line {...s} stroke="rgba(6,9,13,0.65)" strokeWidth={4.2} />
+                    <line {...s} stroke="var(--t-bus)" strokeWidth={2.8} />
+                  </g>
+                );
               });
             })}
           </g>
-          {/* metro — rides the roads between stations, offset -4, dashed */}
+          {/* metro — rides the roads between stations, offset -6, dashed */}
           <g strokeLinecap="round">
             {metroEdges.map((e, ei) => {
               const p = e.path ?? [e.a, e.b];
               return p.slice(1).map((_, si) => {
                 const a = nodeById(p[si]);
                 const b = nodeById(p[si + 1]);
-                const s = off(a.x, a.y, b.x, b.y, -4);
+                const s = off(a.x, a.y, b.x, b.y, -5.5);
                 return (
-                  <line
-                    key={`${ei}-${si}`}
-                    {...s}
-                    stroke="var(--t-metro)"
-                    strokeWidth={2.8}
-                    strokeDasharray="2 7"
-                  />
+                  <g key={`${ei}-${si}`}>
+                    <line {...s} stroke="rgba(6,9,13,0.65)" strokeWidth={4.4} strokeDasharray="3 6" />
+                    <line {...s} stroke="var(--t-metro)" strokeWidth={3} strokeDasharray="3 6" />
+                  </g>
                 );
               });
             })}
@@ -268,16 +257,26 @@ export function BoardCanvas() {
               const a = nodeById(e.a);
               const b = nodeById(e.b);
               return (
-                <line
-                  key={i}
-                  x1={a.x}
-                  y1={a.y}
-                  x2={b.x}
-                  y2={b.y}
-                  stroke="var(--t-river)"
-                  strokeWidth={3.2}
-                  strokeDasharray="12 9"
-                />
+                <g key={i}>
+                  <line
+                    x1={a.x}
+                    y1={a.y}
+                    x2={b.x}
+                    y2={b.y}
+                    stroke="rgba(6,9,13,0.55)"
+                    strokeWidth={5.2}
+                    strokeDasharray="12 9"
+                  />
+                  <line
+                    x1={a.x}
+                    y1={a.y}
+                    x2={b.x}
+                    y2={b.y}
+                    stroke="var(--t-river)"
+                    strokeWidth={3.6}
+                    strokeDasharray="12 9"
+                  />
+                </g>
               );
             })}
           </g>

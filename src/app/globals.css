@@ -30,11 +30,13 @@
   --ok: #57c08a;
   --danger: #e5657b;
 
-  /* transport semantics — RESERVED for the board / legend / transport chips */
-  --t-auto: #e6b12e;
-  --t-bus: #3e9b4f;
-  --t-metro: #ce4b4b;
-  --t-river: #4a86c4;
+  /* transport semantics — RESERVED for the board / legend / transport chips.
+     Saturated on purpose: these have to read as bold route colours against
+     a dark map, the way the physical board's taxi/bus/underground lines do. */
+  --t-auto: #f4cf3a;
+  --t-bus: #2fd15c;
+  --t-metro: #ff4438;
+  --t-river: #43a6ef;
 
   /* in-game board (Google-Maps-dark style) + a cooler accent so it
      doesn't fight the yellow taxi network. See DESIGN_SYSTEM.md §2. */
