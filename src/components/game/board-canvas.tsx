@@ -192,10 +192,7 @@ export function BoardCanvas() {
           <path d={BOARD.coastPath} fill="var(--game-water)" />
           <path d={BOARD.coastPath} fill="none" stroke="#3f7fb0" strokeWidth={2} opacity={0.45} />
           {BOARD.riverPaths.map((d, i) => (
-            <g key={i}>
-              <path d={d} fill="none" stroke="var(--game-water)" strokeWidth={40} strokeLinecap="round" />
-              <path d={d} fill="none" stroke="#2f6c9a" strokeWidth={40} strokeLinecap="round" opacity={0.3} />
-            </g>
+            <path key={i} d={d} fill="none" stroke="var(--game-water)" strokeWidth={40} strokeLinecap="round" />
           ))}
 
           {/* parks */}
