@@ -281,35 +281,57 @@ function build(): Board {
     union(c.a, c.b);
   }
 
-  // 1b) BRIDGES — one clean crossing per riverside node. Shortest spans
-  //     first (nearest partner on the other bank), so both directly-across
-  //     and slightly-diagonal pairs get connected. No two bridges cross,
-  //     no bridge crosses a road, one bridge per node.
+  // 1b) BRIDGES — one clean crossing per riverside node. Rivers here run
+  //     roughly east-west, so match each north-bank node to the south-bank
+  //     node most directly opposite (closest x). Best-aligned pairs first
+  //     → parallel bridges, no "diagonal in a quadrilateral". A wide band
+  //     + long span cap so nodes a couple of rows back (with a park in the
+  //     way) still get bridged. A follow-up pass connects any node the
+  //     matching left out to its nearest free partner across.
   const bridgeEdges: { a: number; b: number }[] = [];
+  const bridged = new Set<number>(); // hard cap: one river crossing per node, anywhere
+  const tryBridge = (a: number, b: number, maxLen: number) => {
+    if (bridged.has(a) || bridged.has(b) || a === b || adj.get(a)!.has(b)) return false;
+    if (dist(XY(a), XY(b)) > maxLen) return false;
+    if (deg(a) >= capOf(a) || deg(b) >= capOf(b)) return false;
+    if (sharedNbrs(a, b) >= 3) return false;
+    if (crosses(XY(a), XY(b))) return false;
+    if (bridgeEdges.some((e) => segCross(XY(a), XY(b), XY(e.a), XY(e.b)))) return false;
+    link(a, b);
+    union(a, b);
+    bridgeEdges.push({ a, b });
+    bridged.add(a);
+    bridged.add(b);
+    return true;
+  };
   for (const river of [RIVER_A, RIVER_B]) {
-    const band = 240;
+    const band = 460;
     const north = nodes.filter((n) => distToPolyline(n, river) < band && riverSide(n, river) < 0);
     const south = nodes.filter((n) => distToPolyline(n, river) < band && riverSide(n, river) > 0);
-    const cands: { a: number; b: number; d: number }[] = [];
-    for (const nn of north)
-      for (const sn of south) {
-        const d = dist(nn, sn);
-        if (d < 380) cands.push({ a: nn.id, b: sn.id, d });
-      }
-    cands.sort((x, y) => x.d - y.d);
-    const bridged = new Set<number>();
-    for (const c of cands) {
-      if (bridged.has(c.a) || bridged.has(c.b)) continue;
-      if (adj.get(c.a)!.has(c.b)) continue;
-      if (deg(c.a) >= capOf(c.a) || deg(c.b) >= capOf(c.b)) continue;
-      if (sharedNbrs(c.a, c.b) >= 2) continue;
-      if (crosses(XY(c.a), XY(c.b))) continue;
-      if (bridgeEdges.some((e) => segCross(XY(c.a), XY(c.b), XY(e.a), XY(e.b)))) continue;
-      link(c.a, c.b);
-      union(c.a, c.b);
-      bridgeEdges.push({ a: c.a, b: c.b });
-      bridged.add(c.a);
-      bridged.add(c.b);
+    // pass 1: closest-x match, best-aligned first
+    const matched = north
+      .map((nn) => {
+        let best: BoardNode | null = null;
+        let bd = Infinity;
+        for (const sn of south) {
+          const dx = Math.abs(nn.x - sn.x);
+          if (dx < bd) {
+            bd = dx;
+            best = sn;
+          }
+        }
+        return best ? { a: nn.id, b: best.id, dx: bd } : null;
+      })
+      .filter((m): m is { a: number; b: number; dx: number } => m !== null)
+      .sort((x, y) => x.dx - y.dx);
+    for (const m of matched) tryBridge(m.a, m.b, 620);
+    // pass 2: any still-unbridged bank node -> nearest free partner across
+    for (const nn of north) {
+      if (bridged.has(nn.id)) continue;
+      const opts = south
+        .filter((sn) => !bridged.has(sn.id))
+        .sort((p, q) => dist2(nn, p) - dist2(nn, q));
+      for (const sn of opts) if (tryBridge(nn.id, sn.id, 640)) break;
     }
   }
 
@@ -375,17 +397,51 @@ function build(): Board {
       for (const other of others) {
         if (adj.get(n.id)!.has(other)) continue;
         if (deg(other) >= (lastResort ? 6 : capOf(other))) continue;
-        if (!lastResort && crossesRiver(XY(n.id), XY(other))) continue;
+        const wouldCrossRiver = crossesRiver(XY(n.id), XY(other));
+        // never give a node a 2nd river crossing
+        if (wouldCrossRiver && (!lastResort || bridged.has(n.id) || bridged.has(other)))
+          continue;
         if (!lastResort && sharedNbrs(n.id, other) >= 2) continue;
         if (crosses(XY(n.id), XY(other))) continue;
         if (
-          lastResort &&
+          wouldCrossRiver &&
           bridgeEdges.some((e) => segCross(XY(n.id), XY(other), XY(e.a), XY(e.b)))
         )
           continue;
         link(n.id, other);
-        if (lastResort && crossesRiver(XY(n.id), XY(other)))
+        if (wouldCrossRiver) {
           bridgeEdges.push({ a: n.id, b: other });
+          bridged.add(n.id);
+          bridged.add(other);
+        }
+        if (deg(n.id) >= 3) break;
+      }
+    }
+  }
+
+  // 3a) hard floor — nobody below 3. Tiers: (0) non-river only, (1) one
+  //     clean river crossing, (2) accept a 2nd river crossing for a node
+  //     that is *still* stuck (degree wins over "one bridge per node").
+  for (let tier = 0; tier < 3; tier++) {
+    for (const n of nodes) {
+      if (deg(n.id) >= 3) continue;
+      const others = nodes
+        .map((m) => m.id)
+        .filter((id) => id !== n.id && !adj.get(n.id)!.has(id))
+        .sort((p, q) => dist2(XY(n.id), XY(p)) - dist2(XY(n.id), XY(q)));
+      for (const other of others) {
+        if (deg(other) >= 7) continue;
+        const rc = crossesRiver(XY(n.id), XY(other));
+        if (rc && tier === 0) continue;
+        if (rc && tier === 1 && (bridged.has(n.id) || bridged.has(other))) continue;
+        if (crosses(XY(n.id), XY(other))) continue;
+        if (bridgeEdges.some((e) => segCross(XY(n.id), XY(other), XY(e.a), XY(e.b)))) continue;
+        link(n.id, other);
+        if (rc) {
+          bridgeEdges.push({ a: n.id, b: other });
+          bridged.add(n.id);
+          bridged.add(other);
+        }
         if (deg(n.id) >= 3) break;
       }
     }
