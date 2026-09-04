@@ -685,6 +685,13 @@ function build(): Board {
   };
   const brand = rngFactory(31337);
   const buildings: string[] = [];
+  // reject any candidate whose (conservative, circular) footprint would overlap
+  // one already placed — real, distinct building blocks instead of a jumble
+  const placed: { x: number; y: number; r: number }[] = [];
+  const BUILDING_GAP = 3;
+  const overlapsPlaced = (x: number, y: number, r: number) =>
+    placed.some((q) => (x - q.x) ** 2 + (y - q.y) ** 2 < (r + q.r) ** 2);
+
   for (let gy = 40; gy < H - 30; gy += 44) {
     for (let gx = 40; gx < W - 30; gx += 44) {
       const p = { x: gx + (brand() - 0.5) * 30, y: gy + (brand() - 0.5) * 30 };
@@ -710,23 +717,25 @@ function build(): Board {
       if (nearNode) continue;
 
       const ang = rang + (brand() - 0.5) * 0.3;
-      const w = 20 + brand() * 42;
-      const h = 18 + brand() * 32;
+      const w = 16 + brand() * 20;
+      const h = 14 + brand() * 16;
+      const r = Math.hypot(w, h) / 2 + BUILDING_GAP;
+      if (overlapsPlaced(p.x, p.y, r)) continue;
       buildings.push(rectPath(p.x, p.y, w, h, ang));
+      placed.push({ x: p.x, y: p.y, r });
+
       if (brand() > 0.5) {
         // an L / T wing
-        const w2 = 12 + brand() * 22;
-        const h2 = 12 + brand() * 22;
+        const w2 = 10 + brand() * 14;
+        const h2 = 10 + brand() * 14;
         const dir = brand() > 0.5 ? 1 : -1;
-        buildings.push(
-          rectPath(
-            p.x + Math.cos(ang) * (w / 2) * dir + Math.cos(ang + Math.PI / 2) * (h / 4),
-            p.y + Math.sin(ang) * (w / 2) * dir + Math.sin(ang + Math.PI / 2) * (h / 4),
-            w2,
-            h2,
-            ang,
-          ),
-        );
+        const wx = p.x + Math.cos(ang) * (w / 2) * dir + Math.cos(ang + Math.PI / 2) * (h / 4);
+        const wy = p.y + Math.sin(ang) * (w / 2) * dir + Math.sin(ang + Math.PI / 2) * (h / 4);
+        const wr = Math.hypot(w2, h2) / 2 + BUILDING_GAP;
+        if (!overlapsPlaced(wx, wy, wr)) {
+          buildings.push(rectPath(wx, wy, w2, h2, ang));
+          placed.push({ x: wx, y: wy, r: wr });
+        }
       }
     }
   }
