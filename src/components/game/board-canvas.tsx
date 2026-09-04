@@ -15,7 +15,10 @@ import { useGame } from "./game-provider";
 import { NodeMarker } from "./node-marker";
 import { MovePopover, type Anchor } from "./move-popover";
 
-const K_MIN = 0.25;
+// k=1 (tx=ty=0) is the board's natural fit — the outer <svg> viewBox already
+// scales the whole map to the container, so zooming out below 1 would just
+// shrink it further inside its own frame instead of showing more of it.
+const K_MIN = 1;
 const K_MAX = 9;
 
 /** perpendicular-offset a segment by `o` board units */
