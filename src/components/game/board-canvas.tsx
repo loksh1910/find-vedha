@@ -31,6 +31,21 @@ function off(ax: number, ay: number, bx: number, by: number, o: number) {
   return { x1: ax + nx, y1: ay + ny, x2: bx + nx, y2: by + ny };
 }
 
+/**
+ * Keep the visible window inside the board's own edges — same idea as the
+ * K_MIN zoom floor, just for pan. At k=1 the board already exactly fills the
+ * viewport, so no pan is allowed at all; the higher k goes, the more slack
+ * there is before an edge would show empty canvas.
+ */
+function clampPan(k: number, tx: number, ty: number) {
+  const minTx = BOARD.width * (1 - k);
+  const minTy = BOARD.height * (1 - k);
+  return {
+    tx: Math.min(0, Math.max(minTx, tx)),
+    ty: Math.min(0, Math.max(minTy, ty)),
+  };
+}
+
 export function BoardCanvas() {
   const { game, viewAs, vedhaVisible, lastKnown, legalDest, pending, pickNode, myTurn } =
     useGame();
@@ -84,9 +99,10 @@ export function BoardCanvas() {
       const cx = (p.x - tx) / k;
       const cy = (p.y - ty) / k;
       const next = Math.min(K_MAX, Math.max(K_MIN, k * (e.deltaY < 0 ? 1.15 : 1 / 1.15)));
+      const clamped = clampPan(next, p.x - cx * next, p.y - cy * next);
       setK(next);
-      setTx(p.x - cx * next);
-      setTy(p.y - cy * next);
+      setTx(clamped.tx);
+      setTy(clamped.ty);
     },
     [k, tx, ty, toViewBox],
   );
@@ -108,8 +124,8 @@ export function BoardCanvas() {
     const dx = e.clientX - drag.current.x;
     const dy = e.clientY - drag.current.y;
     if (Math.abs(dx) + Math.abs(dy) > 3) moved.current = true;
-    setTx((v) => v + dx * s);
-    setTy((v) => v + dy * s);
+    setTx((v) => clampPan(k, v + dx * s, 0).tx);
+    setTy((v) => clampPan(k, 0, v + dy * s).ty);
     drag.current = { x: e.clientX, y: e.clientY };
   };
   const endDrag = () => {
@@ -120,6 +136,13 @@ export function BoardCanvas() {
     setK(1);
     setTx(0);
     setTy(0);
+  };
+  const zoomBy = (factor: number) => {
+    const next = Math.min(K_MAX, Math.max(K_MIN, k * factor));
+    const clamped = clampPan(next, tx, ty);
+    setK(next);
+    setTx(clamped.tx);
+    setTy(clamped.ty);
   };
 
   const detOf = useMemo(
@@ -354,14 +377,14 @@ export function BoardCanvas() {
       <div className="absolute bottom-3 right-3 flex flex-col gap-1 rounded-md border border-line bg-surface/90 p-1 backdrop-blur">
         <button
           aria-label="Zoom in"
-          onClick={() => setK((v) => Math.min(K_MAX, v * 1.25))}
+          onClick={() => zoomBy(1.25)}
           className="grid h-8 w-8 place-items-center rounded text-muted hover:bg-surface-2 hover:text-text"
         >
           <Plus size={15} />
         </button>
         <button
           aria-label="Zoom out"
-          onClick={() => setK((v) => Math.max(K_MIN, v / 1.25))}
+          onClick={() => zoomBy(1 / 1.25)}
           className="grid h-8 w-8 place-items-center rounded text-muted hover:bg-surface-2 hover:text-text"
         >
           <Minus size={15} />
