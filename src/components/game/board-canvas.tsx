@@ -95,6 +95,7 @@ export function BoardCanvas() {
     [game.pawns],
   );
   const roads = useMemo(() => roadSegments(), []);
+  const busEdges = useMemo(() => BOARD.edges.filter((e) => e.mode === "bus"), []);
   const metroEdges = useMemo(() => BOARD.edges.filter((e) => e.mode === "metro"), []);
   const riverEdges = useMemo(() => BOARD.edges.filter((e) => e.mode === "river"), []);
 
@@ -191,23 +192,25 @@ export function BoardCanvas() {
               );
             })}
           </g>
-          {/* bus — subset of roads, offset +4 */}
+          {/* bus — rides the roads between stops, offset +4 */}
           <g strokeLinecap="round">
-            {roads
-              .filter((r) => r.bus)
-              .map((r, i) => {
-                const a = nodeById(r.a);
-                const b = nodeById(r.b);
+            {busEdges.map((e, ei) => {
+              const p = e.path ?? [e.a, e.b];
+              return p.slice(1).map((_, si) => {
+                const a = nodeById(p[si]);
+                const b = nodeById(p[si + 1]);
                 const s = off(a.x, a.y, b.x, b.y, 4);
-                return <line key={i} {...s} stroke="var(--t-bus)" strokeWidth={2.8} />;
-              })}
+                return <line key={`${ei}-${si}`} {...s} stroke="var(--t-bus)" strokeWidth={2.8} />;
+              });
+            })}
           </g>
-          {/* metro — along the roads between stations, offset -4, dashed */}
+          {/* metro — rides the roads between stations, offset -4, dashed */}
           <g strokeLinecap="round">
-            {metroEdges.map((e, ei) =>
-              (e.path ?? [e.a, e.b]).slice(1).map((_, si) => {
-                const a = nodeById((e.path ?? [e.a, e.b])[si]);
-                const b = nodeById((e.path ?? [e.a, e.b])[si + 1]);
+            {metroEdges.map((e, ei) => {
+              const p = e.path ?? [e.a, e.b];
+              return p.slice(1).map((_, si) => {
+                const a = nodeById(p[si]);
+                const b = nodeById(p[si + 1]);
                 const s = off(a.x, a.y, b.x, b.y, -4);
                 return (
                   <line
@@ -218,8 +221,8 @@ export function BoardCanvas() {
                     strokeDasharray="2 7"
                   />
                 );
-              }),
-            )}
+              });
+            })}
           </g>
           {/* river / wildcard */}
           <g strokeLinecap="round">
