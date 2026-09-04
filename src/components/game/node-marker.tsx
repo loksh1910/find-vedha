@@ -8,9 +8,9 @@ import type { BoardNode } from "@/lib/board/board-data";
     autobusmetro  → three bands: green (bus) / yellow (auto) / red (metro)
 */
 
-const R = 22;
-const BOX_W = 26;
-const BOX_H = 12;
+const R = 26;
+const BOX_W = 32;
+const BOX_H = 17;
 
 export function NodeMarker({
   node,
@@ -77,7 +77,7 @@ export function NodeMarker({
         y={-BOX_H / 2}
         width={BOX_W}
         height={BOX_H}
-        rx={4}
+        rx={5}
         fill="var(--bg-inset)"
       />
       <text
