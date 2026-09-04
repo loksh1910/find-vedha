@@ -1,13 +1,15 @@
 "use client";
 
+import { Layers2 } from "lucide-react";
 import { useGame } from "./game-provider";
 import { TicketChip } from "./bits";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 
 const VEDHA_START = { auto: 4, bus: 3, metro: 3 };
 
 export function TicketPanel() {
-  const { game, viewAs } = useGame();
+  const { game, viewAs, canDouble, startDouble, pending, doubleActive } = useGame();
 
   if (viewAs === "vedha") {
     const w = game.pawns.vedha.wallet;
@@ -16,8 +18,8 @@ export function TicketPanel() {
       w.auto + w.bus + w.metro - (VEDHA_START.auto + VEDHA_START.bus + VEDHA_START.metro),
     );
     return (
-      <div className="flex items-center gap-4 border-t border-line bg-surface px-4 py-2">
-        <span className="eyebrow">Your tickets</span>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line bg-surface px-4 py-2">
+        <span className="eyebrow shrink-0">Your tickets</span>
         <div className="flex flex-wrap items-center gap-1.5">
           <TicketChip t="auto" n={w.auto} />
           <TicketChip t="bus" n={w.bus} />
@@ -30,6 +32,26 @@ export function TicketPanel() {
           <span className="font-mono text-[0.6875rem] text-ok">
             +{gained} from Detectives
           </span>
+        )}
+
+        {doubleActive && game.turn === "vedha" ? (
+          <span className="ml-auto inline-flex shrink-0 items-center gap-2 rounded-sm border border-signal/50 bg-signal/10 px-2 py-1 font-mono text-[0.6875rem] text-signal">
+            <Layers2 size={13} />
+            Double-Move — hop {game.double.hopsDone + 1} of 2
+          </span>
+        ) : (
+          canDouble &&
+          !pending && (
+            <Button
+              size="sm"
+              variant="default"
+              className="ml-auto shrink-0"
+              onClick={startDouble}
+            >
+              <Layers2 size={14} />
+              Start Double-Move
+            </Button>
+          )
         )}
       </div>
     );

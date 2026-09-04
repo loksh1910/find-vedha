@@ -7,7 +7,6 @@ import { Hud } from "./hud";
 import { BoardCanvas } from "./board-canvas";
 import { RevealOverlay } from "./reveal-overlay";
 import { TicketPanel } from "./ticket-panel";
-import { MoveControls } from "./move-controls";
 import { RightRail } from "./right-rail";
 import { GameOverOverlay } from "./game-over-overlay";
 
@@ -24,7 +23,6 @@ export function GameScreen() {
               <RevealOverlay />
             </div>
             <TicketPanel />
-            <MoveControls />
           </div>
           {railOpen ? (
             <RightRail onClose={() => setRailOpen(false)} />

@@ -2,6 +2,7 @@
 
 import {
   useCallback,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -12,6 +13,7 @@ import { Crosshair, Minus, Plus } from "lucide-react";
 import { BOARD, nodeById, roadSegments } from "@/lib/board/board-data";
 import { useGame } from "./game-provider";
 import { NodeMarker } from "./node-marker";
+import { MovePopover, type Anchor } from "./move-popover";
 
 const K_MIN = 0.25;
 const K_MAX = 9;
@@ -30,12 +32,39 @@ export function BoardCanvas() {
   const { game, viewAs, vedhaVisible, lastKnown, legalDest, pending, pickNode, myTurn } =
     useGame();
   const svgRef = useRef<SVGSVGElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
   const [k, setK] = useState(1);
   const [tx, setTx] = useState(0);
   const [ty, setTy] = useState(0);
   const [grabbing, setGrabbing] = useState(false);
   const drag = useRef<{ x: number; y: number } | null>(null);
   const moved = useRef(false);
+  const [anchor, setAnchor] = useState<Anchor | null>(null);
+
+  // keep the move popover pinned to the tapped station as the board pans/zooms
+  useLayoutEffect(() => {
+    if (!pending || !svgRef.current || !wrapRef.current) {
+      setAnchor(null);
+      return;
+    }
+    const n = nodeById(pending.to);
+    const svg = svgRef.current;
+    const pt = svg.createSVGPoint();
+    pt.x = n.x * k + tx;
+    pt.y = n.y * k + ty;
+    const scr = pt.matrixTransform(svg.getScreenCTM()!);
+    const wrap = wrapRef.current.getBoundingClientRect();
+    const ax = scr.x - wrap.left;
+    const ay = scr.y - wrap.top;
+    // flip against the visible viewport (the board pans/zooms freely, so a
+    // node's board coords say nothing about where it sits on screen)
+    setAnchor({
+      x: ax,
+      y: ay,
+      flipX: ax > wrap.width - 300 && ax > 300,
+      flipY: ay > wrap.height - 240,
+    });
+  }, [pending, k, tx, ty]);
 
   const toViewBox = useCallback((clientX: number, clientY: number) => {
     const svg = svgRef.current!;
@@ -107,7 +136,7 @@ export function BoardCanvas() {
   }, [pending, game]);
 
   return (
-    <div className="relative h-full w-full overflow-hidden bg-game-canvas">
+    <div ref={wrapRef} className="relative h-full w-full overflow-hidden bg-game-canvas">
       <svg
         ref={svgRef}
         viewBox={`0 0 ${BOARD.width} ${BOARD.height}`}
@@ -347,6 +376,8 @@ export function BoardCanvas() {
           )}
         </g>
       </svg>
+
+      {anchor && <MovePopover anchor={anchor} />}
 
       <div className="absolute bottom-3 right-3 flex flex-col gap-1 rounded-md border border-line bg-surface/90 p-1 backdrop-blur">
         <button
