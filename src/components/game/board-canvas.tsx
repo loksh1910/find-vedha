@@ -9,23 +9,21 @@ import {
   type WheelEvent,
 } from "react";
 import { Crosshair, Minus, Plus } from "lucide-react";
-import { BOARD, nodeById, type BoardEdge } from "@/lib/board/board-data";
+import { BOARD, nodeById, roadSegments } from "@/lib/board/board-data";
 import { useGame } from "./game-provider";
 import { NodeMarker } from "./node-marker";
-import { cn } from "@/lib/cn";
 
 const K_MIN = 0.25;
-const K_MAX = 8;
+const K_MAX = 9;
 
-function edgePoints(e: BoardEdge): [number, number][] {
-  const ids = e.path && e.path.length > 1 ? e.path : [e.a, e.b];
-  return ids.map((id) => {
-    const n = nodeById(id);
-    return [n.x, n.y];
-  });
-}
-function toPoly(pts: [number, number][]) {
-  return pts.map((p) => p.join(",")).join(" ");
+/** perpendicular-offset a segment by `o` board units */
+function off(ax: number, ay: number, bx: number, by: number, o: number) {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const len = Math.hypot(dx, dy) || 1;
+  const nx = (-dy / len) * o;
+  const ny = (dx / len) * o;
+  return { x1: ax + nx, y1: ay + ny, x2: bx + nx, y2: by + ny };
 }
 
 export function BoardCanvas() {
@@ -92,8 +90,7 @@ export function BoardCanvas() {
     () => Object.values(game.pawns).filter((p) => p.role === "detective"),
     [game.pawns],
   );
-  const autoEdges = useMemo(() => BOARD.edges.filter((e) => e.mode === "auto"), []);
-  const busEdges = useMemo(() => BOARD.edges.filter((e) => e.mode === "bus"), []);
+  const roads = useMemo(() => roadSegments(), []);
   const metroEdges = useMemo(() => BOARD.edges.filter((e) => e.mode === "metro"), []);
   const riverEdges = useMemo(() => BOARD.edges.filter((e) => e.mode === "river"), []);
 
@@ -119,64 +116,63 @@ export function BoardCanvas() {
         style={{ cursor: grabbing ? "grabbing" : "grab" }}
       >
         <defs>
-          <radialGradient id="fv-ground" cx="42%" cy="34%" r="90%">
-            <stop offset="0%" stopColor="#141b26" />
-            <stop offset="55%" stopColor="#0f1520" />
-            <stop offset="100%" stopColor="#090c12" />
+          <radialGradient id="fv-ground" cx="42%" cy="34%" r="95%">
+            <stop offset="0%" stopColor="#131a24" />
+            <stop offset="60%" stopColor="#0e141d" />
+            <stop offset="100%" stopColor="#080b10" />
           </radialGradient>
         </defs>
 
-        <rect x={-3000} y={-3000} width={9000} height={9000} fill="#090c12" />
+        <rect x={-3000} y={-3000} width={9000} height={9000} fill="#080b10" />
 
         <g transform={`translate(${tx} ${ty}) scale(${k})`}>
           <rect x={0} y={0} width={BOARD.width} height={BOARD.height} fill="url(#fv-ground)" />
 
-          {/* water — bay + rivers */}
+          {/* water */}
           <path d={BOARD.coastPath} fill="var(--game-water)" />
-          <path
-            d={BOARD.coastPath}
-            fill="none"
-            stroke="#3f7fb0"
-            strokeWidth={2}
-            opacity={0.5}
-          />
+          <path d={BOARD.coastPath} fill="none" stroke="#3f7fb0" strokeWidth={2} opacity={0.45} />
           {BOARD.riverPaths.map((d, i) => (
             <g key={i}>
-              <path
-                d={d}
-                fill="none"
-                stroke="var(--game-water)"
-                strokeWidth={40}
-                strokeLinecap="round"
-              />
-              <path
-                d={d}
-                fill="none"
-                stroke="#2f6c9a"
-                strokeWidth={40}
-                strokeLinecap="round"
-                opacity={0.35}
-              />
+              <path d={d} fill="none" stroke="var(--game-water)" strokeWidth={40} strokeLinecap="round" />
+              <path d={d} fill="none" stroke="#2f6c9a" strokeWidth={40} strokeLinecap="round" opacity={0.3} />
             </g>
           ))}
 
           {/* parks */}
           {BOARD.parks.map((d, i) => (
-            <path key={i} d={d} fill="#16241c" stroke="#20362a" strokeWidth={2} />
+            <path key={i} d={d} fill="#15231b" stroke="#1f3529" strokeWidth={2} />
           ))}
 
-          {/* faint street underlay for a city texture */}
-          <g stroke="#3a4658" strokeWidth={5} strokeLinecap="round" opacity={0.22}>
-            {autoEdges.map((e, i) => {
-              const [a, b] = [nodeById(e.a), nodeById(e.b)];
-              return <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} />;
+          {/* ---- grey road network (one substrate; every route rides these) ---- */}
+          <g strokeLinecap="round">
+            {roads.map((r, i) => {
+              const a = nodeById(r.a);
+              const b = nodeById(r.b);
+              return <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#3b434f" strokeWidth={16} />;
+            })}
+          </g>
+          <g strokeLinecap="round">
+            {roads.map((r, i) => {
+              const a = nodeById(r.a);
+              const b = nodeById(r.b);
+              return <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#4d5766" strokeWidth={11} />;
             })}
           </g>
 
-          {/* glow bloom under the lit routes */}
-          <g strokeLinecap="round" opacity={0.28}>
-            {autoEdges.map((e, i) => {
-              const [a, b] = [nodeById(e.a), nodeById(e.b)];
+          {/* ---- route stripes, all on the same roads ---- */}
+          {/* faint glow */}
+          <g strokeLinecap="round" opacity={0.22}>
+            {roads.map((r, i) => {
+              const a = nodeById(r.a);
+              const b = nodeById(r.b);
+              return <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="var(--t-auto)" strokeWidth={7} />;
+            })}
+          </g>
+          {/* auto — every road, centred */}
+          <g strokeLinecap="round">
+            {roads.map((r, i) => {
+              const a = nodeById(r.a);
+              const b = nodeById(r.b);
               return (
                 <line
                   key={i}
@@ -185,78 +181,47 @@ export function BoardCanvas() {
                   x2={b.x}
                   y2={b.y}
                   stroke="var(--t-auto)"
-                  strokeWidth={9}
-                />
-              );
-            })}
-            {busEdges.map((e, i) => (
-              <polyline
-                key={i}
-                points={toPoly(edgePoints(e))}
-                fill="none"
-                stroke="var(--t-bus)"
-                strokeWidth={13}
-              />
-            ))}
-            {metroEdges.map((e, i) => {
-              const [a, b] = [nodeById(e.a), nodeById(e.b)];
-              return (
-                <line
-                  key={i}
-                  x1={a.x}
-                  y1={a.y}
-                  x2={b.x}
-                  y2={b.y}
-                  stroke="var(--t-metro)"
-                  strokeWidth={11}
+                  strokeWidth={2.6}
+                  opacity={0.92}
                 />
               );
             })}
           </g>
-
-          {/* crisp lit routes */}
-          <g strokeLinecap="round" strokeLinejoin="round">
-            {autoEdges.map((e, i) => {
-              const [a, b] = [nodeById(e.a), nodeById(e.b)];
-              return (
-                <line
-                  key={i}
-                  x1={a.x}
-                  y1={a.y}
-                  x2={b.x}
-                  y2={b.y}
-                  stroke="var(--t-auto)"
-                  strokeWidth={2.4}
-                  opacity={0.9}
-                />
-              );
-            })}
-            {busEdges.map((e, i) => (
-              <polyline
-                key={i}
-                points={toPoly(edgePoints(e))}
-                fill="none"
-                stroke="var(--t-bus)"
-                strokeWidth={4.5}
-              />
-            ))}
-            {metroEdges.map((e, i) => {
-              const [a, b] = [nodeById(e.a), nodeById(e.b)];
-              return (
-                <line
-                  key={i}
-                  x1={a.x}
-                  y1={a.y}
-                  x2={b.x}
-                  y2={b.y}
-                  stroke="var(--t-metro)"
-                  strokeWidth={3.6}
-                  strokeDasharray="2 8"
-                />
-              );
-            })}
+          {/* bus — subset of roads, offset +4 */}
+          <g strokeLinecap="round">
+            {roads
+              .filter((r) => r.bus)
+              .map((r, i) => {
+                const a = nodeById(r.a);
+                const b = nodeById(r.b);
+                const s = off(a.x, a.y, b.x, b.y, 4);
+                return <line key={i} {...s} stroke="var(--t-bus)" strokeWidth={2.8} />;
+              })}
+          </g>
+          {/* metro — along the roads between stations, offset -4, dashed */}
+          <g strokeLinecap="round">
+            {metroEdges.map((e, ei) =>
+              (e.path ?? [e.a, e.b]).slice(1).map((_, si) => {
+                const a = nodeById((e.path ?? [e.a, e.b])[si]);
+                const b = nodeById((e.path ?? [e.a, e.b])[si + 1]);
+                const s = off(a.x, a.y, b.x, b.y, -4);
+                return (
+                  <line
+                    key={`${ei}-${si}`}
+                    {...s}
+                    stroke="var(--t-metro)"
+                    strokeWidth={2.8}
+                    strokeDasharray="2 7"
+                  />
+                );
+              }),
+            )}
+          </g>
+          {/* river / wildcard */}
+          <g strokeLinecap="round">
             {riverEdges.map((e, i) => {
-              const [a, b] = [nodeById(e.a), nodeById(e.b)];
+              const a = nodeById(e.a);
+              const b = nodeById(e.b);
               return (
                 <line
                   key={i}
@@ -265,7 +230,7 @@ export function BoardCanvas() {
                   x2={b.x}
                   y2={b.y}
                   stroke="var(--t-river)"
-                  strokeWidth={3.4}
+                  strokeWidth={3.2}
                   strokeDasharray="12 9"
                 />
               );
@@ -286,21 +251,8 @@ export function BoardCanvas() {
 
           {viewAs === "detective" && lastKnown != null && !vedhaVisible && (
             <g transform={`translate(${nodeById(lastKnown).x} ${nodeById(lastKnown).y})`}>
-              <circle
-                r={30}
-                fill="none"
-                stroke="var(--reveal)"
-                strokeWidth={2}
-                strokeDasharray="4 5"
-                opacity={0.8}
-              />
-              <text
-                y={-40}
-                textAnchor="middle"
-                fontSize={13}
-                fontFamily="var(--font-mono)"
-                fill="var(--reveal)"
-              >
+              <circle r={30} fill="none" stroke="var(--reveal)" strokeWidth={2} strokeDasharray="4 5" opacity={0.8} />
+              <text y={-40} textAnchor="middle" fontSize={13} fontFamily="var(--font-mono)" fill="var(--reveal)">
                 last seen
               </text>
             </g>
@@ -362,14 +314,7 @@ export function BoardCanvas() {
           {vedhaVisible && (
             <g transform={`translate(${nodeById(game.pawns.vedha.node).x} ${nodeById(game.pawns.vedha.node).y})`}>
               <line x1={0} y1={-2} x2={0} y2={-36} stroke="var(--signal)" strokeWidth={3} />
-              <circle
-                cx={0}
-                cy={-46}
-                r={14}
-                fill="var(--signal)"
-                stroke="var(--reveal)"
-                strokeWidth={3}
-              />
+              <circle cx={0} cy={-46} r={14} fill="var(--signal)" stroke="var(--reveal)" strokeWidth={3} />
               <text
                 x={0}
                 y={-46}
@@ -411,11 +356,12 @@ export function BoardCanvas() {
         </button>
       </div>
 
-      <div className="absolute bottom-3 left-3 flex flex-wrap gap-x-3 gap-y-1 rounded-md border border-line bg-surface/90 px-3 py-2 text-[0.6875rem] text-muted backdrop-blur">
+      <div className="absolute bottom-3 left-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-line bg-surface/90 px-3 py-2 text-[0.6875rem] text-muted backdrop-blur">
+        <span className="text-faint">one road, layered:</span>
         <Legend swatch="var(--t-auto)" label="Auto" />
         <Legend swatch="var(--t-bus)" label="Bus" />
         <Legend swatch="var(--t-metro)" label="Metro" dashed />
-        <Legend swatch="var(--t-river)" label="River · Wildcard" dashed />
+        <Legend swatch="var(--t-river)" label="Wildcard" dashed />
       </div>
     </div>
   );
@@ -425,7 +371,7 @@ function Legend({ swatch, label, dashed }: { swatch: string; label: string; dash
   return (
     <span className="inline-flex items-center gap-1.5">
       <span
-        className={cn("inline-block h-0.5 w-4", dashed && "opacity-90")}
+        className="inline-block h-0.5 w-4"
         style={{
           background: dashed
             ? `repeating-linear-gradient(90deg, ${swatch} 0 4px, transparent 4px 7px)`
