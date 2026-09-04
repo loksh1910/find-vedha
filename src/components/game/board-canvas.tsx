@@ -63,7 +63,11 @@ export function BoardCanvas() {
     drag.current = { x: e.clientX, y: e.clientY };
     moved.current = false;
     setGrabbing(true);
-    (e.target as Element).setPointerCapture?.(e.pointerId);
+    try {
+      (e.target as Element).setPointerCapture?.(e.pointerId);
+    } catch {
+      /* pointer already released */
+    }
   };
   const onPointerMove = (e: PointerEvent<SVGSVGElement>) => {
     if (!drag.current) return;

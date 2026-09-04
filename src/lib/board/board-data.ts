@@ -121,18 +121,6 @@ function inLand(p: P): boolean {
     if (((p.x - k.cx) / (k.rx + 14)) ** 2 + ((p.y - k.cy) / (k.ry + 14)) ** 2 < 1) return false;
   return true;
 }
-function bankOfA(p: P): number {
-  let ny = 0;
-  let bd = Infinity;
-  for (const q of RIVER_A) {
-    const d = dist2(p, q);
-    if (d < bd) {
-      bd = d;
-      ny = q.y;
-    }
-  }
-  return Math.sign(p.y - ny) || 1;
-}
 
 /* ---------- points ---------- */
 
@@ -176,7 +164,35 @@ function makePoints(): P[] {
 /* ---------- build ---------- */
 
 function build(): Board {
-  const nodes: BoardNode[] = makePoints().map((p, i) => ({
+  const raw = makePoints();
+  // even out spacing: a few passes of pairwise repulsion, clamped to land
+  const targetGap = Math.sqrt((W * H) / raw.length) * 0.62;
+  for (let iter = 0; iter < 24; iter++) {
+    for (let i = 0; i < raw.length; i++) {
+      let mx = 0;
+      let my = 0;
+      for (let j = 0; j < raw.length; j++) {
+        if (i === j) continue;
+        const dx = raw[i].x - raw[j].x;
+        const dy = raw[i].y - raw[j].y;
+        const d = Math.hypot(dx, dy) || 1;
+        if (d < targetGap) {
+          const push = (targetGap - d) / d;
+          mx += dx * push * 0.5;
+          my += dy * push * 0.5;
+        }
+      }
+      let nx = raw[i].x + mx;
+      let ny = raw[i].y + my;
+      if (!inLand({ x: nx, y: ny })) {
+        nx = raw[i].x;
+        ny = raw[i].y;
+      }
+      raw[i] = { x: nx, y: ny };
+    }
+  }
+
+  const nodes: BoardNode[] = raw.map((p, i) => ({
     id: i + 1,
     x: Math.round(p.x),
     y: Math.round(p.y),
@@ -334,21 +350,29 @@ function build(): Board {
     return [src, dst];
   };
 
-  /* ----- Bus: routes that walk node-to-next-node down the streets ----- */
+  const hopCount = (a: number, b: number) => roadPath(a, b).length - 1;
+
+  /* ----- Bus: several long, roughly-straight routes spread across the map.
+     Each route walks node-to-next-node (adjacent) down the streets. ----- */
   const busEdges: BoardEdge[] = [];
   const busPairs = new Set<string>();
+  const key = (a: number, b: number) => (a < b ? `${a}-${b}` : `${b}-${a}`);
   const addBus = (a: number, b: number) => {
-    const k = a < b ? `${a}-${b}` : `${b}-${a}`;
-    if (busPairs.has(k)) return;
-    busPairs.add(k);
+    if (busPairs.has(key(a, b))) return;
+    busPairs.add(key(a, b));
     busEdges.push({ a, b, mode: "bus" });
   };
-  const busSeeds = pickSpread(nodes, 7, 4102);
+  const busSeeds = pickSpread(
+    nodes.filter((n) => deg(n.id) >= 3),
+    6,
+    4102,
+  );
   for (const seed of busSeeds) {
+    // start the route heading roughly away from the map centre for spread
+    let heading = Math.atan2(XY(seed).y - H / 2, XY(seed).x - W / 2) + Math.PI;
     let prev = -1;
     let cur = seed;
-    let heading = rand() * Math.PI * 2;
-    for (let step = 0; step < 15; step++) {
+    for (let step = 0; step < 16; step++) {
       let best = -1;
       let bestScore = Infinity;
       for (const nb of adj.get(cur)!) {
@@ -356,76 +380,131 @@ function build(): Board {
         const ang = Math.atan2(XY(nb).y - XY(cur).y, XY(nb).x - XY(cur).x);
         let turn = Math.abs(ang - heading);
         if (turn > Math.PI) turn = Math.PI * 2 - turn;
-        const usedPenalty = busPairs.has(cur < nb ? `${cur}-${nb}` : `${nb}-${cur}`) ? 3 : 0;
-        const score = turn + usedPenalty;
+        const score = turn + (busPairs.has(key(cur, nb)) ? 2.6 : 0);
         if (score < bestScore) {
           bestScore = score;
           best = nb;
         }
       }
-      if (best < 0 || bestScore > 2.4) break;
+      if (best < 0 || bestScore > 2.0) break; // stop on a sharp turn
       addBus(cur, best);
-      heading = Math.atan2(XY(best).y - XY(cur).y, XY(best).x - XY(cur).x);
+      heading = 0.6 * heading + 0.4 * Math.atan2(XY(best).y - XY(cur).y, XY(best).x - XY(cur).x);
       prev = cur;
       cur = best;
     }
   }
+  const isBusNode = (id: number) => [...adj.get(id)!].some((nb) => busPairs.has(key(id, nb)));
 
-  /* ----- Metro: a few lines; stations far apart, line drawn along roads ----- */
+  /* ----- Metro: exactly 15 stations, evenly spread, 3–8 street-hops apart.
+     A metro MOVE jumps station→station; the line is drawn along the roads. ----- */
   const metroStations = pickSpread(
     nodes.filter((n) => deg(n.id) >= 3),
-    14,
+    15,
     77,
   );
   const metroEdges: BoardEdge[] = [];
-  const remaining = new Set(metroStations);
-  while (remaining.size >= 2) {
-    let cur = [...remaining][0];
-    remaining.delete(cur);
-    let hops = 0;
-    while (remaining.size && hops < 5) {
-      let best = -1;
-      let bd = Infinity;
-      for (const s of remaining) {
-        const d = dist2(XY(cur), XY(s));
-        if (d < bd) {
-          bd = d;
-          best = s;
-        }
-      }
-      if (best < 0) break;
-      metroEdges.push({ a: cur, b: best, mode: "metro", path: roadPath(cur, best) });
-      remaining.delete(best);
-      cur = best;
-      hops++;
+  const metroPairs = new Set<string>();
+  const mParent = new Map(metroStations.map((s) => [s, s]));
+  const mFind = (x: number): number => {
+    while (mParent.get(x)! !== x) x = mParent.get(x)!;
+    return x;
+  };
+  const addMetro = (a: number, b: number) => {
+    if (a === b || metroPairs.has(key(a, b))) return;
+    metroPairs.add(key(a, b));
+    metroEdges.push({ a, b, mode: "metro", path: roadPath(a, b) });
+    mParent.set(mFind(a), mFind(b));
+  };
+  for (const s of metroStations) {
+    const others = metroStations
+      .filter((o) => o !== s)
+      .sort((p, q) => dist2(XY(s), XY(p)) - dist2(XY(s), XY(q)));
+    let added = 0;
+    for (const o of others) {
+      if (added >= 2) break;
+      if (metroPairs.has(key(s, o))) continue;
+      const h = hopCount(s, o);
+      if (h < 3) continue;
+      if (h > 8 && added >= 1) continue;
+      addMetro(s, o);
+      added++;
     }
   }
+  // stitch any metro sub-networks together with the shortest hop≥3 link
+  {
+    let comps = new Set(metroStations.map(mFind));
+    while (comps.size > 1) {
+      let bp: [number, number] | null = null;
+      let bh = Infinity;
+      for (const a of metroStations)
+        for (const b of metroStations) {
+          if (mFind(a) === mFind(b) || metroPairs.has(key(a, b))) continue;
+          const h = hopCount(a, b);
+          if (h >= 3 && h < bh) {
+            bh = h;
+            bp = [a, b];
+          }
+        }
+      if (!bp) break;
+      addMetro(bp[0], bp[1]);
+      comps = new Set(metroStations.map(mFind));
+    }
+  }
+  // every metro station must also be a bus stop (green + red cap)
+  for (const s of metroStations) {
+    if (isBusNode(s)) continue;
+    const nb = [...adj.get(s)!][0];
+    if (nb != null) addBus(s, nb);
+  }
 
-  /* ----- River (Wildcard-only) crossings ----- */
+  /* ----- River (Wildcard-only) crossings: as many as fit without crossing
+     a road or another crossing. ----- */
   const riverEdges: BoardEdge[] = [];
-  const north = nodes.filter((n) => bankOfA(n) < 0);
-  const south = nodes.filter((n) => bankOfA(n) > 0);
-  for (let k = 0; k < 3; k++) {
-    const fx = W * (0.24 + k * 0.28);
-    const nn = north.slice().sort((a, b) => Math.abs(a.x - fx) - Math.abs(b.x - fx))[0];
-    const sn = south.slice().sort((a, b) => Math.abs(a.x - fx) - Math.abs(b.x - fx))[0];
-    if (nn && sn) riverEdges.push({ a: nn.id, b: sn.id, mode: "river" });
+  const riverCrosses = (a: P, b: P) => riverEdges.some((e) => segCross(a, b, XY(e.a), XY(e.b)));
+  for (const river of [RIVER_A, RIVER_B]) {
+    const near = (n: BoardNode) => distToPolyline(n, river) < 170;
+    const side = (n: BoardNode) => {
+      let ny = 0;
+      let bd = Infinity;
+      for (const q of river) {
+        const d = dist2(n, q);
+        if (d < bd) {
+          bd = d;
+          ny = q.y;
+        }
+      }
+      return Math.sign(n.y - ny) || 1;
+    };
+    const north = nodes.filter((n) => near(n) && side(n) < 0);
+    const south = nodes.filter((n) => near(n) && side(n) > 0);
+    const pairs: { a: number; b: number; d: number }[] = [];
+    for (const nn of north)
+      for (const sn of south) {
+        const d = dist(nn, sn);
+        if (d < 300) pairs.push({ a: nn.id, b: sn.id, d });
+      }
+    pairs.sort((x, y) => x.d - y.d);
+    const usedEnds = new Set<number>();
+    let added = 0;
+    for (const p of pairs) {
+      if (added >= 7) break;
+      if (usedEnds.has(p.a) || usedEnds.has(p.b)) continue;
+      if (crosses(XY(p.a), XY(p.b))) continue;
+      if (riverCrosses(XY(p.a), XY(p.b))) continue;
+      riverEdges.push({ a: p.a, b: p.b, mode: "river" });
+      usedEnds.add(p.a);
+      usedEnds.add(p.b);
+      added++;
+    }
   }
 
   const edges = [...autoEdges, ...busEdges, ...metroEdges, ...riverEdges];
 
-  // node kind from the edges touching it
-  for (const e of edges)
-    for (const id of [e.a, e.b]) {
-      const n = nodes[id - 1];
-      if (e.mode === "metro") n.kind = "autobusmetro";
-      else if (e.mode === "bus" && n.kind === "auto") n.kind = "autobus";
-    }
-  // a station the metro line PASSES THROUGH is a metro node too
-  for (const e of metroEdges)
-    for (const id of e.path ?? [])
-      if (nodes[id - 1].kind !== "autobusmetro")
-        nodes[id - 1].kind = nodes[id - 1].kind === "autobus" ? "autobusmetro" : nodes[id - 1].kind;
+  // node kind — bus from bus edges; metro ONLY for the 15 stations
+  for (const e of [...busEdges])
+    for (const id of [e.a, e.b])
+      if (nodes[id - 1].kind === "auto") nodes[id - 1].kind = "autobus";
+  for (const s of metroStations) nodes[s - 1].kind = "autobusmetro";
 
   // start nodes — 20, well-connected, spread
   const startPool = nodes.filter((n) => deg(n.id) >= 3);
