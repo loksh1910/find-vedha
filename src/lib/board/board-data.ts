@@ -112,6 +112,46 @@ function distToPolyline(p: P, poly: P[]): number {
   }
   return best;
 }
+/** arc-length position of the closest point on `poly` (an "along-river" coordinate) */
+function projectAlong(p: P, poly: P[]): number {
+  let acc = 0;
+  let bestS = 0;
+  let bestD = Infinity;
+  for (let i = 0; i + 1 < poly.length; i++) {
+    const a = poly[i];
+    const b = poly[i + 1];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const segLen = Math.hypot(dx, dy) || 1;
+    let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / (segLen * segLen);
+    t = Math.max(0, Math.min(1, t));
+    const d = Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+    if (d < bestD) {
+      bestD = d;
+      bestS = acc + t * segLen;
+    }
+    acc += segLen;
+  }
+  return bestS;
+}
+const RIVER_SEGS: [P, P][] = [];
+for (const poly of [RIVER_A, RIVER_B])
+  for (let i = 0; i + 1 < poly.length; i++) RIVER_SEGS.push([poly[i], poly[i + 1]]);
+function crossesRiver(a: P, b: P): boolean {
+  return RIVER_SEGS.some(([p, q]) => segCross(a, b, p, q));
+}
+function riverSide(p: P, poly: P[]): number {
+  let ny = 0;
+  let bd = Infinity;
+  for (const q of poly) {
+    const d = dist2(p, q);
+    if (d < bd) {
+      bd = d;
+      ny = q.y;
+    }
+  }
+  return Math.sign(p.y - ny) || 1;
+}
 function inLand(p: P): boolean {
   if (p.x < 46 || p.y < 46 || p.y > H - 46) return false;
   if (p.x > coastX(p.y) - 50) return false;
@@ -234,9 +274,12 @@ function build(): Board {
   };
   const union = (a: number, b: number) => parent.set(find(a), find(b));
 
-  // 1) spanning + moderate proximity graph, planar, degree-capped
+  // 1) spanning + moderate proximity graph, planar, degree-capped.
+  //    Never let an ordinary street cross a river — the ONLY river
+  //    crossings are the controlled bridge pass below.
   for (const c of cand) {
     if (adj.get(c.a)!.has(c.b)) continue;
+    if (crossesRiver(XY(c.a), XY(c.b))) continue;
     const spanning = find(c.a) !== find(c.b);
     if (!spanning && (deg(c.a) >= 4 || deg(c.b) >= 4)) continue;
     if (!spanning && c.d > 165) continue;
@@ -248,6 +291,47 @@ function build(): Board {
     }
     link(c.a, c.b);
     union(c.a, c.b);
+  }
+
+  // 1b) BRIDGES — one clean crossing per riverside node, straight across
+  //     (match each bank node to the one most directly opposite). No two
+  //     bridges cross; no "diagonal in a quadrilateral".
+  const bridgeEdges: { a: number; b: number }[] = [];
+  for (const river of [RIVER_A, RIVER_B]) {
+    const band = 230;
+    const northSide = nodes
+      .filter((n) => distToPolyline(n, river) < band && riverSide(n, river) < 0)
+      .map((n) => ({ id: n.id, s: projectAlong(n, river) }));
+    const southSide = nodes
+      .filter((n) => distToPolyline(n, river) < band && riverSide(n, river) > 0)
+      .map((n) => ({ id: n.id, s: projectAlong(n, river) }));
+    const cands: { a: number; b: number; ds: number; len: number }[] = [];
+    for (const nn of northSide) {
+      let best: { id: number; s: number } | null = null;
+      let bd = Infinity;
+      for (const sn of southSide) {
+        const d = Math.abs(nn.s - sn.s);
+        if (d < bd) {
+          bd = d;
+          best = sn;
+        }
+      }
+      if (best) cands.push({ a: nn.id, b: best.id, ds: bd, len: dist(XY(nn.id), XY(best.id)) });
+    }
+    cands.sort((x, y) => x.ds - y.ds); // most-directly-across first
+    const bridged = new Set<number>();
+    for (const c of cands) {
+      if (bridged.has(c.a) || bridged.has(c.b)) continue;
+      if (c.len > 360 || adj.get(c.a)!.has(c.b)) continue;
+      if (deg(c.a) >= 6 || deg(c.b) >= 6) continue;
+      if (crosses(XY(c.a), XY(c.b))) continue;
+      if (bridgeEdges.some((e) => segCross(XY(c.a), XY(c.b), XY(e.a), XY(e.b)))) continue;
+      link(c.a, c.b);
+      union(c.a, c.b);
+      bridgeEdges.push({ a: c.a, b: c.b });
+      bridged.add(c.a);
+      bridged.add(c.b);
+    }
   }
 
   // 2) merge any stray components into the main one (shortest non-crossing bridge)
@@ -297,69 +381,31 @@ function build(): Board {
     }
   }
 
-  // 3) every node >= 3 streets
-  for (let pass = 0; pass < 3; pass++) {
+  // 3) every node >= 3 streets. Prefer non-river links; only as a last
+  //    resort (a stuck riverside node) allow one extra clean crossing.
+  for (let pass = 0; pass < 4; pass++) {
+    const allowRiver = pass === 3;
     for (const n of nodes) {
       if (deg(n.id) >= 3) continue;
-      const near = cand
-        .filter((c) => (c.a === n.id || c.b === n.id))
-        .map((c) => (c.a === n.id ? c.b : c.a));
-      // widen search if this node is short on candidates
-      const extra =
-        near.length < 6
-          ? nodes
-              .map((m) => m.id)
-              .filter((id) => id !== n.id)
-              .sort((p, q) => dist2(XY(n.id), XY(p)) - dist2(XY(n.id), XY(q)))
-              .slice(0, 12)
-          : [];
-      for (const other of [...near, ...extra]) {
+      const others = nodes
+        .map((m) => m.id)
+        .filter((id) => id !== n.id)
+        .sort((p, q) => dist2(XY(n.id), XY(p)) - dist2(XY(n.id), XY(q)))
+        .slice(0, 16);
+      for (const other of others) {
         if (adj.get(n.id)!.has(other) || deg(other) >= 6) continue;
+        if (!allowRiver && crossesRiver(XY(n.id), XY(other))) continue;
         if (crosses(XY(n.id), XY(other))) continue;
+        if (
+          allowRiver &&
+          bridgeEdges.some((e) => segCross(XY(n.id), XY(other), XY(e.a), XY(e.b)))
+        )
+          continue;
         link(n.id, other);
+        if (allowRiver && crossesRiver(XY(n.id), XY(other)))
+          bridgeEdges.push({ a: n.id, b: other });
         if (deg(n.id) >= 3) break;
       }
-    }
-  }
-
-  // 4) BRIDGES — connect the river banks with real roads. As many as fit
-  //    without crossing another road or bridge. The river is not a barrier.
-  for (const river of [RIVER_A, RIVER_B]) {
-    const nearRiver = (n: BoardNode) => distToPolyline(n, river) < 240;
-    const sideOf = (n: BoardNode) => {
-      let ny = 0;
-      let bd = Infinity;
-      for (const q of river) {
-        const d = dist2(n, q);
-        if (d < bd) {
-          bd = d;
-          ny = q.y;
-        }
-      }
-      return Math.sign(n.y - ny) || 1;
-    };
-    const north = nodes.filter((n) => nearRiver(n) && sideOf(n) < 0);
-    const south = nodes.filter((n) => nearRiver(n) && sideOf(n) > 0);
-    const pairs: { a: number; b: number; d: number }[] = [];
-    for (const nn of north)
-      for (const sn of south) {
-        const d = dist(nn, sn);
-        if (d < 340) pairs.push({ a: nn.id, b: sn.id, d });
-      }
-    pairs.sort((x, y) => x.d - y.d);
-    const bridgesFrom = new Map<number, number>();
-    let built = 0;
-    for (const p of pairs) {
-      if (built >= 14) break;
-      if ((bridgesFrom.get(p.a) ?? 0) >= 2 || (bridgesFrom.get(p.b) ?? 0) >= 2) continue;
-      if (adj.get(p.a)!.has(p.b)) continue;
-      if (deg(p.a) >= 6 || deg(p.b) >= 6) continue;
-      if (crosses(XY(p.a), XY(p.b))) continue;
-      link(p.a, p.b);
-      union(p.a, p.b);
-      bridgesFrom.set(p.a, (bridgesFrom.get(p.a) ?? 0) + 1);
-      bridgesFrom.set(p.b, (bridgesFrom.get(p.b) ?? 0) + 1);
-      built++;
     }
   }
 
