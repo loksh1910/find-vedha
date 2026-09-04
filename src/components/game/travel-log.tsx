@@ -72,7 +72,7 @@ export function TravelLog() {
                     );
                   })}
                   {reveal && (
-                    <span className="font-mono text-[0.5625rem] uppercase tracking-wide text-signal">
+                    <span className="font-mono text-[0.5625rem] text-signal">
                       reveal
                     </span>
                   )}

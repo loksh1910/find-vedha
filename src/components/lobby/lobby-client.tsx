@@ -374,7 +374,7 @@ export function LobbyClient({ code }: { code: string }) {
                       />
                       <span
                         className={cn(
-                          "w-24 shrink-0 font-mono text-[0.6875rem] uppercase tracking-[0.12em]",
+                          "w-24 shrink-0 font-mono text-[0.6875rem]",
                           slot.kind === "vedha" ? "text-signal" : "text-muted",
                         )}
                       >
@@ -385,7 +385,7 @@ export function LobbyClient({ code }: { code: string }) {
                           <Avatar name={p.name} avatarId={p.avatarId} size={22} />
                           <span className="text-sm text-text">{p.name}</span>
                           {p.isMe && (
-                            <span className="rounded-sm bg-surface-2 px-1.5 py-0.5 font-mono text-[0.625rem] uppercase text-faint">
+                            <span className="rounded-sm bg-surface-2 px-1.5 py-0.5 font-mono text-[0.625rem] text-faint">
                               you
                             </span>
                           )}
@@ -499,7 +499,7 @@ export function LobbyClient({ code }: { code: string }) {
             <div className="flex items-center gap-2 opacity-60">
               <span className="text-sm text-muted">AI Detectives</span>
               <Switch checked={false} disabled aria-label="Fill empty slots with AI (coming soon)" />
-              <span className="font-mono text-[0.625rem] uppercase text-faint">soon</span>
+              <span className="font-mono text-[0.625rem] text-faint">soon</span>
             </div>
             <Button
               variant="primary"

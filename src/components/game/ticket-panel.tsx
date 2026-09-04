@@ -82,7 +82,7 @@ export function TicketPanel() {
             {p.wallet.auto}·{p.wallet.bus}·{p.wallet.metro}
           </span>
           {p.stuck && (
-            <span className="font-mono text-[0.5625rem] uppercase text-danger">
+            <span className="font-mono text-[0.5625rem] text-danger">
               stuck
             </span>
           )}

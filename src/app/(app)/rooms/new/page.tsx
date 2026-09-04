@@ -86,7 +86,7 @@ export default function CreateRoomPage() {
               <div>
                 <div className="flex items-center gap-2 text-sm text-text">
                   Fill empty Detective slots with AI
-                  <span className="rounded-sm border border-line px-1.5 py-0.5 font-mono text-[0.625rem] uppercase tracking-wider text-faint">
+                  <span className="rounded-sm border border-line px-1.5 py-0.5 font-mono text-[0.625rem] text-faint">
                     Soon
                   </span>
                 </div>

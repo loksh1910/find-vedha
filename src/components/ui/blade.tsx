@@ -36,14 +36,12 @@ export function Blade({
       />
       <span
         className={cn(
-          "flex items-center gap-2 font-mono uppercase tracking-[0.12em] text-muted",
+          "flex items-center gap-2 font-mono text-muted",
           size === "sm" ? "px-2 py-1 text-[0.6875rem]" : "px-2.5 py-1.5 text-xs",
         )}
       >
         <span className="text-text/90">{label}</span>
-        {value != null && (
-          <span className="text-faint normal-case tracking-normal">{value}</span>
-        )}
+        {value != null && <span className="text-faint">{value}</span>}
       </span>
     </span>
   );

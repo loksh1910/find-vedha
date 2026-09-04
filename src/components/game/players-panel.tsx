@@ -47,12 +47,12 @@ export function PlayersPanel() {
                 <div className="flex items-center gap-2 text-sm text-text">
                   {p.label}
                   {game.turn === p.id && game.status.kind === "playing" && (
-                    <span className="font-mono text-[0.5625rem] uppercase text-game-accent">
+                    <span className="font-mono text-[0.5625rem] text-game-accent">
                       to move
                     </span>
                   )}
                   {p.stuck && (
-                    <span className="font-mono text-[0.5625rem] uppercase text-danger">
+                    <span className="font-mono text-[0.5625rem] text-danger">
                       stuck
                     </span>
                   )}

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Bricolage_Grotesque, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
+import { Bricolage_Grotesque, Poppins, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import { AppStateProvider } from "@/components/providers/app-state-provider";
 
@@ -8,10 +8,10 @@ const bricolage = Bricolage_Grotesque({
   variable: "--font-bricolage",
 });
 
-const plexSans = IBM_Plex_Sans({
+const poppins = Poppins({
   subsets: ["latin"],
   weight: ["400", "500", "600"],
-  variable: "--font-plex-sans",
+  variable: "--font-poppins",
 });
 
 const plexMono = IBM_Plex_Mono({
@@ -30,7 +30,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${bricolage.variable} ${plexSans.variable} ${plexMono.variable} h-full`}
+      className={`${bricolage.variable} ${poppins.variable} ${plexMono.variable} h-full`}
     >
       <body className="min-h-full">
         <AppStateProvider>{children}</AppStateProvider>

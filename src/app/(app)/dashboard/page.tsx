@@ -98,7 +98,7 @@ export default function DashboardPage() {
           <div className="overflow-hidden rounded-lg border border-line">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-line text-left font-mono text-[0.6875rem] uppercase tracking-[0.1em] text-faint">
+                <tr className="border-b border-line text-left font-mono text-[0.6875rem] text-faint">
                   <th className="px-4 py-2.5 font-medium">Date</th>
                   <th className="px-4 py-2.5 font-medium">Role</th>
                   <th className="px-4 py-2.5 font-medium">Result</th>

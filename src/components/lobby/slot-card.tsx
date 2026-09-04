@@ -42,7 +42,7 @@ export function SlotCard({
         />
         <span
           className={cn(
-            "font-mono text-[0.6875rem] uppercase tracking-[0.12em]",
+            "font-mono text-[0.6875rem]",
             isVedha ? "text-signal" : "text-muted",
           )}
         >
@@ -60,7 +60,7 @@ export function SlotCard({
             <Avatar name={holder.name} avatarId={holder.avatarId} size={24} />
             <span className="truncate text-sm text-text">{holder.name}</span>
             {isMe && (
-              <span className="ml-auto rounded-sm bg-surface-2 px-1.5 py-0.5 font-mono text-[0.625rem] uppercase text-faint">
+              <span className="ml-auto rounded-sm bg-surface-2 px-1.5 py-0.5 font-mono text-[0.625rem] text-faint">
                 you
               </span>
             )}

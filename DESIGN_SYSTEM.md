@@ -102,7 +102,7 @@ Loaded via `next/font/google` in `layout.tsx`, exposed as CSS variables.
 | Role | Family | Weights | Used for |
 |---|---|---|---|
 | **Display** | **Bricolage Grotesque** | 600 / 700 / 800 | wordmark, headlines, big role names ("VEDHA"), countdown numbers |
-| **Body** | **IBM Plex Sans** | 400 / 500 / 600 | all running text, buttons, labels, nav |
+| **Body** | **Poppins** | 400 / 500 / 600 | all running text, buttons, labels, nav |
 | **Data** | **IBM Plex Mono** | 400 / 500 | invite codes, route/bus numbers, node numbers, ticket counts, timers, stat figures — always `font-variant-numeric: tabular-nums` |
 
 Fallback stacks: display/body → `system-ui, sans-serif`; data → `ui-monospace, "SF Mono", Menlo, monospace`.
@@ -112,7 +112,7 @@ Fallback stacks: display/body → `system-ui, sans-serif`; data → `ui-monospac
 
 - Display ≥ `1.75rem`: `letter-spacing: -0.02em`, `line-height: 1.05`.
 - Body: `line-height: 1.55`.
-- **Eyebrow / blade label:** IBM Plex Mono, `0.75rem`, `text-transform: uppercase`, `letter-spacing: 0.14em`, `--text-muted`.
+- **Eyebrow / blade label:** IBM Plex Mono, `0.75rem`, sentence case (no `text-transform`), `--text-muted`.
 
 ---
 
