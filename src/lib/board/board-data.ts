@@ -112,28 +112,6 @@ function distToPolyline(p: P, poly: P[]): number {
   }
   return best;
 }
-/** arc-length position of the closest point on `poly` (an "along-river" coordinate) */
-function projectAlong(p: P, poly: P[]): number {
-  let acc = 0;
-  let bestS = 0;
-  let bestD = Infinity;
-  for (let i = 0; i + 1 < poly.length; i++) {
-    const a = poly[i];
-    const b = poly[i + 1];
-    const dx = b.x - a.x;
-    const dy = b.y - a.y;
-    const segLen = Math.hypot(dx, dy) || 1;
-    let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / (segLen * segLen);
-    t = Math.max(0, Math.min(1, t));
-    const d = Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
-    if (d < bestD) {
-      bestD = d;
-      bestS = acc + t * segLen;
-    }
-    acc += segLen;
-  }
-  return bestS;
-}
 const RIVER_SEGS: [P, P][] = [];
 for (const poly of [RIVER_A, RIVER_B])
   for (let i = 0; i + 1 < poly.length; i++) RIVER_SEGS.push([poly[i], poly[i + 1]]);
@@ -274,56 +252,57 @@ function build(): Board {
   };
   const union = (a: number, b: number) => parent.set(find(a), find(b));
 
+  // A handful of nodes act as junctions and may carry 5–6 streets;
+  // every other node is capped at 4.
+  const junctions = new Set(pickSpread(nodes, 14, 909));
+  const capOf = (id: number) => (junctions.has(id) ? 6 : 4);
+  const sharedNbrs = (a: number, b: number) => {
+    let s = 0;
+    for (const nb of adj.get(a)!) if (adj.get(b)!.has(nb)) s++;
+    return s;
+  };
+
   // 1) spanning + moderate proximity graph, planar, degree-capped.
   //    Never let an ordinary street cross a river — the ONLY river
-  //    crossings are the controlled bridge pass below.
+  //    crossings are the controlled bridge pass below. No edge that would
+  //    be the diagonal of a quad (a,b sharing 2+ neighbours).
   for (const c of cand) {
     if (adj.get(c.a)!.has(c.b)) continue;
     if (crossesRiver(XY(c.a), XY(c.b))) continue;
     const spanning = find(c.a) !== find(c.b);
-    if (!spanning && (deg(c.a) >= 4 || deg(c.b) >= 4)) continue;
+    if (!spanning && (deg(c.a) >= capOf(c.a) || deg(c.b) >= capOf(c.b))) continue;
     if (!spanning && c.d > 165) continue;
     if (crosses(XY(c.a), XY(c.b))) continue;
-    if (!spanning) {
-      let shared = 0;
-      for (const nb of adj.get(c.a)!) if (adj.get(c.b)!.has(nb)) shared++;
-      if (shared >= 1 && rand() > 0.55) continue;
-    }
+    const shared = sharedNbrs(c.a, c.b);
+    if (shared >= 2) continue; // would be a diagonal
+    if (!spanning && shared >= 1 && !junctions.has(c.a) && !junctions.has(c.b) && rand() > 0.35)
+      continue;
     link(c.a, c.b);
     union(c.a, c.b);
   }
 
-  // 1b) BRIDGES — one clean crossing per riverside node, straight across
-  //     (match each bank node to the one most directly opposite). No two
-  //     bridges cross; no "diagonal in a quadrilateral".
+  // 1b) BRIDGES — one clean crossing per riverside node. Shortest spans
+  //     first (nearest partner on the other bank), so both directly-across
+  //     and slightly-diagonal pairs get connected. No two bridges cross,
+  //     no bridge crosses a road, one bridge per node.
   const bridgeEdges: { a: number; b: number }[] = [];
   for (const river of [RIVER_A, RIVER_B]) {
-    const band = 230;
-    const northSide = nodes
-      .filter((n) => distToPolyline(n, river) < band && riverSide(n, river) < 0)
-      .map((n) => ({ id: n.id, s: projectAlong(n, river) }));
-    const southSide = nodes
-      .filter((n) => distToPolyline(n, river) < band && riverSide(n, river) > 0)
-      .map((n) => ({ id: n.id, s: projectAlong(n, river) }));
-    const cands: { a: number; b: number; ds: number; len: number }[] = [];
-    for (const nn of northSide) {
-      let best: { id: number; s: number } | null = null;
-      let bd = Infinity;
-      for (const sn of southSide) {
-        const d = Math.abs(nn.s - sn.s);
-        if (d < bd) {
-          bd = d;
-          best = sn;
-        }
+    const band = 240;
+    const north = nodes.filter((n) => distToPolyline(n, river) < band && riverSide(n, river) < 0);
+    const south = nodes.filter((n) => distToPolyline(n, river) < band && riverSide(n, river) > 0);
+    const cands: { a: number; b: number; d: number }[] = [];
+    for (const nn of north)
+      for (const sn of south) {
+        const d = dist(nn, sn);
+        if (d < 380) cands.push({ a: nn.id, b: sn.id, d });
       }
-      if (best) cands.push({ a: nn.id, b: best.id, ds: bd, len: dist(XY(nn.id), XY(best.id)) });
-    }
-    cands.sort((x, y) => x.ds - y.ds); // most-directly-across first
+    cands.sort((x, y) => x.d - y.d);
     const bridged = new Set<number>();
     for (const c of cands) {
       if (bridged.has(c.a) || bridged.has(c.b)) continue;
-      if (c.len > 360 || adj.get(c.a)!.has(c.b)) continue;
-      if (deg(c.a) >= 6 || deg(c.b) >= 6) continue;
+      if (adj.get(c.a)!.has(c.b)) continue;
+      if (deg(c.a) >= capOf(c.a) || deg(c.b) >= capOf(c.b)) continue;
+      if (sharedNbrs(c.a, c.b) >= 2) continue;
       if (crosses(XY(c.a), XY(c.b))) continue;
       if (bridgeEdges.some((e) => segCross(XY(c.a), XY(c.b), XY(e.a), XY(e.b)))) continue;
       link(c.a, c.b);
@@ -381,10 +360,11 @@ function build(): Board {
     }
   }
 
-  // 3) every node >= 3 streets. Prefer non-river links; only as a last
-  //    resort (a stuck riverside node) allow one extra clean crossing.
+  // 3) every node >= 3 streets. Prefer non-river, non-diagonal links; only
+  //    on the final pass relax (river crossing / shared neighbours) for a
+  //    node that is otherwise stuck.
   for (let pass = 0; pass < 4; pass++) {
-    const allowRiver = pass === 3;
+    const lastResort = pass === 3;
     for (const n of nodes) {
       if (deg(n.id) >= 3) continue;
       const others = nodes
@@ -393,20 +373,33 @@ function build(): Board {
         .sort((p, q) => dist2(XY(n.id), XY(p)) - dist2(XY(n.id), XY(q)))
         .slice(0, 16);
       for (const other of others) {
-        if (adj.get(n.id)!.has(other) || deg(other) >= 6) continue;
-        if (!allowRiver && crossesRiver(XY(n.id), XY(other))) continue;
+        if (adj.get(n.id)!.has(other)) continue;
+        if (deg(other) >= (lastResort ? 6 : capOf(other))) continue;
+        if (!lastResort && crossesRiver(XY(n.id), XY(other))) continue;
+        if (!lastResort && sharedNbrs(n.id, other) >= 2) continue;
         if (crosses(XY(n.id), XY(other))) continue;
         if (
-          allowRiver &&
+          lastResort &&
           bridgeEdges.some((e) => segCross(XY(n.id), XY(other), XY(e.a), XY(e.b)))
         )
           continue;
         link(n.id, other);
-        if (allowRiver && crossesRiver(XY(n.id), XY(other)))
+        if (lastResort && crossesRiver(XY(n.id), XY(other)))
           bridgeEdges.push({ a: n.id, b: other });
         if (deg(n.id) >= 3) break;
       }
     }
+  }
+
+  // 3b) drop any leftover diagonals — an edge whose endpoints still share
+  //     2+ neighbours, when both endpoints stay at >= 3 without it.
+  for (const e of [...autoEdges]) {
+    if (sharedNbrs(e.a, e.b) < 2) continue;
+    if (deg(e.a) <= 3 || deg(e.b) <= 3) continue;
+    if (bridgeEdges.some((b) => key(b.a, b.b) === key(e.a, e.b))) continue;
+    adj.get(e.a)!.delete(e.b);
+    adj.get(e.b)!.delete(e.a);
+    autoEdges.splice(autoEdges.indexOf(e), 1);
   }
 
   /* ----- shortest path on the street graph ----- */
@@ -492,11 +485,37 @@ function build(): Board {
     addMetro(bp[0], bp[1]);
   }
 
-  /* ----- Bus: ~34 stops spread evenly over the whole map (metro stations
-     are always stops). A bus edge jumps stop→stop, skipping 1–2 plain
-     taxi nodes, and rides the roads in between. ----- */
-  const nonMetro = nodes.filter((n) => deg(n.id) >= 3 && !metroStations.includes(n.id));
-  const busStops = [...new Set([...metroStations, ...pickSpread(nonMetro, 20, 4102)])];
+  /* ----- Bus: ~55 stops spread evenly over the WHOLE map (every region
+     gets some; metro stations are always stops). A bus edge jumps
+     stop→stop across ~2 plain taxi nodes (hop count 3), riding the roads
+     in between. Denser than the metro. ----- */
+  // Bus stops: seed with the metro stations, then repeatedly add the node
+  // farthest from every current stop that is still >= 3 street-hops from
+  // all of them (so every region gets covered AND there are always >= 2
+  // plain taxi nodes between two bus stops).
+  const busStops = [...metroStations];
+  {
+    const pool = nodes.filter((n) => deg(n.id) >= 3 && !busStops.includes(n.id));
+    for (let guard = 0; guard < 60; guard++) {
+      let best = -1;
+      let bestD = -1;
+      for (const n of pool) {
+        if (busStops.includes(n.id)) continue;
+        if (busStops.some((s) => hopCount(s, n.id) < 3)) continue;
+        let nd = Infinity;
+        for (const s of busStops) {
+          const d = dist2(n, XY(s));
+          if (d < nd) nd = d;
+        }
+        if (nd > bestD) {
+          bestD = nd;
+          best = n.id;
+        }
+      }
+      if (best < 0) break;
+      busStops.push(best);
+    }
+  }
   const busEdges: BoardEdge[] = [];
   const busPairs = new Set<string>();
   const bUF = uf(busStops);
@@ -512,10 +531,10 @@ function build(): Board {
       .sort((p, q) => dist2(XY(s), XY(p)) - dist2(XY(s), XY(q)));
     let added = 0;
     for (const o of others) {
-      if (added >= 2) break;
+      if (added >= 3) break;
       if (busPairs.has(key(s, o))) continue;
       const h = hopCount(s, o);
-      if (h < 2 || h > 3) continue; // 1–2 taxi nodes between two bus stops
+      if (h < 3 || h > 4) continue; // >= 2 taxi nodes between two bus stops
       addBus(s, o);
       added++;
     }
@@ -527,7 +546,7 @@ function build(): Board {
       for (const b of busStops) {
         if (bUF.f(a) === bUF.f(b) || busPairs.has(key(a, b))) continue;
         const h = hopCount(a, b);
-        if (h >= 2 && h <= 5 && h < bh) {
+        if (h >= 3 && h <= 7 && h < bh) {
           bh = h;
           bp = [a, b];
         }
