@@ -343,6 +343,8 @@ export function LobbyClient({ code }: { code: string }) {
         </div>
       </header>
 
+      <LobbyVideo peers={players.filter((p) => !p.isMe)} />
+
       <div className="grid flex-1 gap-0 lg:grid-cols-[1fr_320px]">
         {/* centre */}
         <section className="flex flex-col p-4 md:p-8">
@@ -452,9 +454,8 @@ export function LobbyClient({ code }: { code: string }) {
           )}
         </section>
 
-        {/* right rail: table video + players + chat */}
+        {/* right rail: players + chat */}
         <aside className="flex flex-col border-t border-line lg:border-l lg:border-t-0">
-          <LobbyVideo peers={players.filter((p) => !p.isMe)} />
           <div className="border-b border-line p-4">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="eyebrow">Players</h2>
