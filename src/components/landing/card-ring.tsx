@@ -293,16 +293,28 @@ function CardFace({ c }: { c: (typeof CARDS)[number] }) {
 }
 
 export function CardRing({ interactive }: { interactive: boolean }) {
-  // signed wheel travel (px) — drives the rotation, unbounded, so the ring
-  // loops through the six cards forever in both directions.
-  const [spin, setSpin] = useState(0);
+  // ring rotation, in DEGREES — unbounded, so the ring loops through the six
+  // cards forever in both directions. Kept in degrees (not wheel px) so that
+  // snapped/jumped values are exact multiples of STEP and `active` never
+  // drifts off by a float rounding error.
+  const [rot, setRot] = useState(0);
 
   useEffect(() => {
     if (!interactive) return;
 
+    let snapId = 0;
+
     const busy = () => !!document.querySelector('[role="dialog"]');
-    const advance = (px: number) =>
-      setSpin((s) => Math.max(-1e6, Math.min(1e6, s + px)));
+    // once scrolling stops, ease to the nearest card so the ring always rests
+    // dead-centre — and the front-card glow is therefore always identical.
+    const advance = (px: number) => {
+      setRot((r) => Math.max(-1e7, Math.min(1e7, r + px * DEG_PER_PX)));
+      clearTimeout(snapId);
+      snapId = window.setTimeout(
+        () => setRot((r) => Math.round(r / STEP) * STEP),
+        160,
+      );
+    };
     const onWheel = (e: WheelEvent) => {
       if (busy()) return;
       e.preventDefault();
@@ -332,19 +344,19 @@ export function CardRing({ interactive }: { interactive: boolean }) {
     return () => {
       window.removeEventListener("wheel", onWheel);
       window.removeEventListener("keydown", onKey);
+      clearTimeout(snapId);
       html.style.overflow = prevOverflow;
     };
   }, [interactive]);
 
-  const rot = spin * DEG_PER_PX;
   const active = ((Math.round(rot / STEP) % N) + N) % N;
 
-  // spin to the nearest turn of the ring that brings card `i` to the front
+  // rotate the shortest way round to bring card `i` to the front
   const jump = (i: number) => {
-    setSpin((s) => {
+    setRot((r) => {
       const target = i * STEP;
-      const turns = Math.round((s * DEG_PER_PX - target) / 360);
-      return (turns * 360 + target) / DEG_PER_PX;
+      const turns = Math.round((r - target) / 360);
+      return turns * 360 + target;
     });
   };
 
@@ -398,7 +410,10 @@ export function CardRing({ interactive }: { interactive: boolean }) {
           const scale = Math.max(0.5, 1 - ad * 0.0075);
           const opacity = Math.max(0, Math.min(1, 1.1 - ad / 95));
           const front = ad < 6;
-          const glow = Math.max(0, 1 - ad / 12); // 1 at dead-front, gone by 12°
+          // exactly one card carries the glow — the one nearest the front —
+          // at full strength, so every card glows identically. The 350ms
+          // box-shadow/border transition cross-fades it during a spin.
+          const glow = i === active ? 1 : 0;
           const baseShadow = "0 36px 90px -30px rgba(0,0,0,0.9)";
           const style: CSSProperties = {
             width: CARD_W,
@@ -415,7 +430,7 @@ export function CardRing({ interactive }: { interactive: boolean }) {
                 ? `${baseShadow}, 0 0 0 1px color-mix(in oklab, var(--signal) ${(glow * 85).toFixed(0)}%, transparent), 0 0 ${(20 * glow).toFixed(0)}px ${(2 * glow).toFixed(1)}px color-mix(in oklab, var(--signal) ${(glow * 62).toFixed(0)}%, transparent), 0 0 ${(60 * glow).toFixed(0)}px ${(10 * glow).toFixed(0)}px color-mix(in oklab, var(--signal) ${(glow * 30).toFixed(0)}%, transparent)`
                 : baseShadow,
             transition:
-              "transform 500ms var(--ease), opacity 380ms linear, filter 300ms linear, box-shadow 320ms linear, border-color 320ms linear",
+              "transform 500ms var(--ease), opacity 380ms linear, filter 300ms linear, box-shadow 360ms linear, border-color 360ms linear",
           };
           return (
             <article
