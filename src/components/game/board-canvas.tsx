@@ -177,59 +177,58 @@ export function BoardCanvas() {
       >
         <defs>
           <radialGradient id="fv-ground" cx="42%" cy="34%" r="95%">
-            <stop offset="0%" stopColor="#131a24" />
-            <stop offset="60%" stopColor="#0e141d" />
-            <stop offset="100%" stopColor="#080b10" />
+            <stop offset="0%" stopColor="#12141a" />
+            <stop offset="60%" stopColor="#0d0f14" />
+            <stop offset="100%" stopColor="#090a0e" />
           </radialGradient>
         </defs>
 
-        <rect x={-3000} y={-3000} width={9000} height={9000} fill="#080b10" />
+        <rect x={-3000} y={-3000} width={9000} height={9000} fill="#090a0e" />
 
         <g transform={`translate(${tx} ${ty}) scale(${k})`}>
           <rect x={0} y={0} width={BOARD.width} height={BOARD.height} fill="url(#fv-ground)" />
 
-          {/* water */}
+          {/* water — one calm desaturated blue-grey, a barely-there shoreline */}
           <path d={BOARD.coastPath} fill="var(--game-water)" />
-          <path d={BOARD.coastPath} fill="none" stroke="#3f7fb0" strokeWidth={2} opacity={0.45} />
+          <path d={BOARD.coastPath} fill="none" stroke="#2b3d4b" strokeWidth={1.5} opacity={0.5} />
           {BOARD.riverPaths.map((d, i) => (
             <path key={i} d={d} fill="none" stroke="var(--game-water)" strokeWidth={40} strokeLinecap="round" />
           ))}
 
-          {/* parks */}
+          {/* parks — quiet green-grey, low contrast with the ground */}
           {BOARD.parks.map((d, i) => (
-            <path key={i} d={d} fill="#15231b" stroke="#1f3529" strokeWidth={2} />
+            <path key={i} d={d} fill="#151c17" stroke="#1d2620" strokeWidth={1.5} />
           ))}
 
-          {/* decorative building footprints (block interiors, behind the roads) —
-               small, densely scattered, mixed shapes, non-overlapping, muted blue */}
-          <g opacity={0.42}>
+          {/* block-interior texture — one flat neutral tone, kept near-invisible
+               so it reads as ground grain, not detail */}
+          <g opacity={0.12}>
             {BOARD.buildings.map((d, i) => (
-              <path key={i} d={d} fill="#6f93cf" stroke="#33517f" strokeWidth={0.8} />
+              <path key={i} d={d} fill="#2c323c" />
             ))}
           </g>
 
-          {/* ---- grey road network — one solid tone, no banding (one substrate;
-               every route rides this same surface) ---- */}
+          {/* ---- grey road network — one solid substrate every route rides ---- */}
           <g strokeLinecap="round">
             {roads.map((r, i) => {
               const a = nodeById(r.a);
               const b = nodeById(r.b);
-              return <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#3a414c" strokeWidth={14} />;
+              return <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#30353f" strokeWidth={13} />;
             })}
           </g>
 
-          {/* ---- route stripes, all on the same road, straight colour — no extra
-               casing rings (that's what was reading as "many shades of grey") ---- */}
+          {/* ---- route stripes — muted hues, clean and readable; bright colour
+               on the board is otherwise saved for the live pieces ---- */}
           {/* auto — every road, centred */}
-          <g strokeLinecap="round">
+          <g strokeLinecap="round" opacity={0.95}>
             {roads.map((r, i) => {
               const a = nodeById(r.a);
               const b = nodeById(r.b);
-              return <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="var(--t-auto)" strokeWidth={3.4} />;
+              return <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="var(--t-auto)" strokeWidth={3.2} />;
             })}
           </g>
           {/* bus — rides the roads between stops, offset +5.5 */}
-          <g strokeLinecap="round">
+          <g strokeLinecap="round" opacity={0.95}>
             {busEdges.map((e, ei) => {
               const p = e.path ?? [e.a, e.b];
               return p.slice(1).map((_, si) => {
@@ -241,7 +240,7 @@ export function BoardCanvas() {
             })}
           </g>
           {/* metro — rides the roads between stations, offset -5.5, dashed */}
-          <g strokeLinecap="round">
+          <g strokeLinecap="round" opacity={0.95}>
             {metroEdges.map((e, ei) => {
               const p = e.path ?? [e.a, e.b];
               return p.slice(1).map((_, si) => {
@@ -255,7 +254,7 @@ export function BoardCanvas() {
             })}
           </g>
           {/* river / wildcard */}
-          <g strokeLinecap="round">
+          <g strokeLinecap="round" opacity={0.8}>
             {riverEdges.map((e, i) => {
               const a = nodeById(e.a);
               const b = nodeById(e.b);
@@ -327,8 +326,8 @@ export function BoardCanvas() {
                   cy={-44}
                   r={13}
                   fill={`var(${p.varName})`}
-                  stroke="#fff"
-                  strokeWidth={2}
+                  stroke="#dfe6ee"
+                  strokeWidth={1.75}
                   opacity={p.stuck ? 0.4 : 1}
                 />
                 <text

@@ -31,20 +31,20 @@
   --danger: #e5657b;
 
   /* transport semantics — RESERVED for the board / legend / transport chips.
-     Saturated on purpose: these have to read as bold route colours against
-     a dark map, the way the physical board's taxi/bus/underground lines do. */
-  --t-auto: #f4cf3a;
-  --t-bus: #2fd15c;
-  --t-metro: #ff4438;
-  --t-river: #43a6ef;
+     Muted and held to one value family, so no single route screams. Bright
+     colour on the board is spent on signal (legal move, reveal), the way a
+     classic transit map keeps its palette calm. */
+  --t-auto: #c6a049; /* taxi — ochre / brass */
+  --t-bus: #5f9e79; /* bus — muted sage */
+  --t-metro: #c2645a; /* underground — muted brick */
+  --t-river: #5e8bac; /* wildcard / river — slate blue */
 
-  /* in-game board (Google-Maps-dark style) + a cooler accent so it
-     doesn't fight the yellow taxi network. See DESIGN_SYSTEM.md §2. */
-  --game-canvas: #0e1116;
-  --game-water: #16324a;
+  /* in-game board — a quiet near-neutral dark so the network is the picture;
+     the live pieces and signals carry the colour. See DESIGN_SYSTEM.md §2. */
+  --game-canvas: #0d0f13;
+  --game-water: #18242f;
   --game-accent: #45cfe0;
   --game-accent-ink: #06222a;
-  --node-ink: #241c08;
   --reveal: #ff5db1;
 
   /* detective slot colours */

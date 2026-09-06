@@ -61,23 +61,31 @@ Defined as CSS custom properties on `:root` in `src/app/globals.css`, exposed to
 
 ### Transport semantics — RESERVED
 Only on the board, the transport legend, and transport/ticket chips. Never UI chrome.
+Kept **muted and to one value family** — no single route should scream. Bright
+colour on the board is spent on signal (legal move, reveal), the way a classic
+transit map keeps its palette calm.
 | Token | Hex | Transport |
 |---|---|---|
-| `--t-auto` | `#E6B12E` | Auto (yellow) |
-| `--t-bus` | `#3E9B4F` | Bus (green) |
-| `--t-metro` | `#CE4B4B` | Metro (red) |
-| `--t-river` | `#4A86C4` | River / Wildcard-only edge (blue, dashed) |
+| `--t-auto` | `#C6A049` | Auto — ochre / brass |
+| `--t-bus` | `#5F9E79` | Bus — muted sage |
+| `--t-metro` | `#C2645A` | Metro — muted brick |
+| `--t-river` | `#5E8BAC` | River / Wildcard-only edge — slate blue, dashed |
 
 ### In-game / board palette
-The game screen (`/room/[code]/play`) uses a Google-Maps-dark canvas, and swaps the amber UI accent for a **cool cyan** so it doesn't compete with the yellow Auto network that covers the board.
+The game screen (`/room/[code]/play`) is a quiet near-neutral dark. The line
+network is the picture; nodes are small; the live pieces (pawns) and the cyan
+`--game-accent` carry the colour.
 | Token | Hex | Use |
 |---|---|---|
-| `--game-canvas` | `#0E1116` | board background — near-black, minimal |
-| `--game-water` | `#16324A` | the river band under the dashed river edge |
+| `--game-canvas` | `#0D0F13` | board background — near-black |
+| `--game-water` | `#18242F` | coastline fill + the river band under the dashed river edge |
 | `--game-accent` | `#45CFE0` | in-game UI accent — active turn, legal-move rings, tab underlines, primary game buttons |
 | `--game-accent-ink` | `#06222A` | text/icon on a `--game-accent` fill |
-| `--node-ink` | `#241C08` | the station number inside the yellow capsule body |
-| `--reveal` | `#FF5DB1` | Vedha's reveal marker + "Vedha surfaced" flash + "last seen" ring — magenta, pops against yellow |
+| `--reveal` | `#FF5DB1` | Vedha's reveal marker + "Vedha surfaced" flash + "last seen" ring — magenta |
+
+Station markers: a small `#161922` disc (radius 16) with the number set straight
+on it and a thin `--t-*` outline (1 / 2 / 3 arcs) for the transports that call
+there. `--node-ink` is retired — the old yellow capsule is gone.
 
 **Station marker** (`node-marker.tsx`) — a vertical capsule: yellow rounded-rect body with the number, a semicircle cap above (green = Bus) and below (red = Metro). Auto-only = all yellow. Detective slot CSS vars stay `--tr-1`…`--tr-5`.
 
