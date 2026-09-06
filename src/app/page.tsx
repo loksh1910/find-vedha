@@ -52,11 +52,7 @@ export default function LandingPage() {
       <div className="pointer-events-none fixed inset-0 bg-gradient-to-b from-bg/75 via-bg/45 to-bg/90" />
       <MapChatter />
 
-      <div
-        className={`relative z-10 mx-auto flex max-w-[1100px] flex-col px-6 md:px-10 ${
-          interactive ? "h-dvh overflow-hidden" : "min-h-dvh"
-        }`}
-      >
+      <div className="relative z-10 mx-auto flex min-h-dvh max-w-[1100px] flex-col px-6 md:px-10">
         <header className="flex items-center justify-between py-5">
           <span data-chatter-avoid>
             <Logo />
@@ -78,63 +74,59 @@ export default function LandingPage() {
           </nav>
         </header>
 
-        <section
-          className={`flex flex-1 flex-col justify-center py-16 ${
-            interactive
-              ? "items-center text-center lg:max-w-[560px] lg:items-start lg:text-left"
-              : "items-center text-center"
-          }`}
-        >
-          <p data-chatter-avoid data-chatter-core className="eyebrow">
-            A hidden-chase game on the Chennai transit map
-          </p>
-          <h1
-            data-chatter-avoid
-            data-chatter-core
-            className="mt-4 font-display text-7xl font-extrabold leading-[0.95] tracking-tight text-text sm:text-8xl"
-          >
-            Find Vedha
-          </h1>
-          <p
-            data-chatter-avoid
-            data-chatter-core
-            className="mt-6 max-w-[52ch] text-lg text-muted"
-          >
-            One player slips into the city and moves in secret. The rest give
-            chase across the transit map — twenty-four rounds to close in.
-          </p>
+        <section className="flex flex-1 flex-col items-center justify-center py-16 lg:items-stretch">
+          <div className="hero-settle w-full max-w-[560px] text-center lg:text-left">
+            <p data-chatter-avoid data-chatter-core className="eyebrow">
+              A hidden-chase game on the Chennai transit map
+            </p>
+            <h1
+              data-chatter-avoid
+              data-chatter-core
+              className="mt-4 font-display text-7xl font-extrabold leading-[0.95] tracking-tight text-text sm:text-8xl"
+            >
+              Find Vedha
+            </h1>
+            <p
+              data-chatter-avoid
+              data-chatter-core
+              className="mx-auto mt-6 max-w-[52ch] text-lg text-muted lg:mx-0"
+            >
+              One player slips into the city and moves in secret. The rest give
+              chase across the transit map — twenty-four rounds to close in.
+            </p>
 
-          <div data-chatter-avoid className="mt-9">
-            <Button size="lg" variant="primary" onClick={onPlay}>
-              Play game
-              <ArrowRight size={17} />
-            </Button>
-          </div>
-
-          {/* transit-line strip: the reveal schedule */}
-          <div data-chatter-avoid className="mt-14 w-full max-w-[520px]">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="eyebrow">Vedha surfaces on</span>
-              <span className="font-mono text-xs text-faint">round 1 → 24</span>
+            <div data-chatter-avoid className="mt-9">
+              <Button size="lg" variant="primary" onClick={onPlay}>
+                Play game
+                <ArrowRight size={17} />
+              </Button>
             </div>
-            <svg viewBox="0 0 520 40" className="w-full" role="img" aria-label="Reveal rounds: 3, 8, 13, 18, 24">
-              <line x1="10" y1="20" x2="510" y2="20" stroke="var(--line-strong)" strokeWidth="2" />
-              {Array.from({ length: 24 }).map((_, i) => {
-                const x = 10 + (i * 500) / 23;
-                const reveal = REVEALS.includes(i + 1);
-                return (
-                  <circle
-                    key={i}
-                    cx={x}
-                    cy={20}
-                    r={reveal ? 6 : 2.5}
-                    fill={reveal ? "var(--signal)" : "var(--bg)"}
-                    stroke={reveal ? "var(--signal)" : "var(--line-strong)"}
-                    strokeWidth="2"
-                  />
-                );
-              })}
-            </svg>
+
+            {/* transit-line strip: the reveal schedule */}
+            <div data-chatter-avoid className="mx-auto mt-14 w-full max-w-[520px] lg:mx-0">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="eyebrow">Vedha surfaces on</span>
+                <span className="font-mono text-xs text-faint">round 1 → 24</span>
+              </div>
+              <svg viewBox="0 0 520 40" className="w-full" role="img" aria-label="Reveal rounds: 3, 8, 13, 18, 24">
+                <line x1="10" y1="20" x2="510" y2="20" stroke="var(--line-strong)" strokeWidth="2" />
+                {Array.from({ length: 24 }).map((_, i) => {
+                  const x = 10 + (i * 500) / 23;
+                  const reveal = REVEALS.includes(i + 1);
+                  return (
+                    <circle
+                      key={i}
+                      cx={x}
+                      cy={20}
+                      r={reveal ? 6 : 2.5}
+                      fill={reveal ? "var(--signal)" : "var(--bg)"}
+                      stroke={reveal ? "var(--signal)" : "var(--line-strong)"}
+                      strokeWidth="2"
+                    />
+                  );
+                })}
+              </svg>
+            </div>
           </div>
         </section>
       </div>
