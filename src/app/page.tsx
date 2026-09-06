@@ -1,9 +1,15 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 import { Logo } from "@/components/shell/logo";
-import { RouteDiagram } from "@/components/shell/route-diagram";
+import { MagnifyMap } from "@/components/landing/magnify-map";
+import { AuthDialog } from "@/components/auth/auth-dialog";
 import { ManualDialog } from "@/components/manual/manual-dialog";
 import { Button } from "@/components/ui/button";
+import { useAppState } from "@/components/providers/app-state-provider";
 
 const STEPS = [
   {
@@ -26,51 +32,54 @@ const STEPS = [
 const REVEALS = [3, 8, 13, 18, 24];
 
 export default function LandingPage() {
-  return (
-    <main className="relative min-h-dvh overflow-hidden">
-      <RouteDiagram className="opacity-40" />
-      <div className="absolute inset-0 bg-gradient-to-b from-bg/40 via-bg/80 to-bg" />
+  const router = useRouter();
+  const { hydrated, isSignedIn } = useAppState();
+  const [authOpen, setAuthOpen] = useState(false);
 
-      <div className="relative mx-auto flex min-h-dvh max-w-[1100px] flex-col px-6 md:px-10">
+  const onPlay = () => {
+    if (!hydrated) return;
+    if (isSignedIn) router.push("/dashboard");
+    else setAuthOpen(true);
+  };
+
+  return (
+    <main className="relative min-h-dvh">
+      <MagnifyMap />
+      {/* keep the copy readable over the map */}
+      <div className="pointer-events-none fixed inset-0 bg-gradient-to-b from-bg/75 via-bg/45 to-bg/90" />
+
+      <div className="relative z-10 mx-auto flex min-h-dvh max-w-[1100px] flex-col px-6 md:px-10">
         <header className="flex items-center justify-between py-5">
           <Logo />
           <nav className="flex items-center gap-1">
             <ManualDialog />
-            <Link
-              href="/login"
-              className="rounded-md px-3 py-2 text-sm text-muted hover:bg-surface-2 hover:text-text"
-            >
-              Log in
-            </Link>
-            <Link href="/signup">
-              <Button size="sm">Sign up</Button>
-            </Link>
+            {hydrated && isSignedIn ? (
+              <Link href="/dashboard">
+                <Button size="sm">Go to dashboard</Button>
+              </Link>
+            ) : (
+              <Button size="sm" onClick={() => setAuthOpen(true)}>
+                Sign in
+              </Button>
+            )}
           </nav>
         </header>
 
         <section className="flex flex-1 flex-col justify-center py-16">
-          <p className="eyebrow">A hidden-chase game · Chennai board · play over video</p>
-          <h1 className="mt-4 max-w-[16ch] font-display text-[2.6rem] font-extrabold leading-[1.03] tracking-tight text-text sm:text-6xl">
-            Someone in this room is Vedha.
+          <p className="eyebrow">A hidden-chase game on the Chennai transit map</p>
+          <h1 className="mt-4 font-display text-7xl font-extrabold leading-[0.95] tracking-tight text-text sm:text-8xl">
+            Find Vedha
           </h1>
-          <p className="mt-5 max-w-[52ch] text-lg text-muted">
-            A private game for 2–6 friends. One of you slips into the city and
-            moves in secret. The rest give chase across the transit map — and have
-            twenty-four rounds to close in.
+          <p className="mt-6 max-w-[52ch] text-lg text-muted">
+            One player slips into the city and moves in secret. The rest give
+            chase across the transit map — twenty-four rounds to close in.
           </p>
 
-          <div className="mt-8 flex flex-wrap items-center gap-3">
-            <Link href="/signup">
-              <Button size="lg" variant="primary">
-                Create a free account
-                <ArrowRight size={17} />
-              </Button>
-            </Link>
-            <Link href="/login">
-              <Button size="lg" variant="ghost">
-                I have an account
-              </Button>
-            </Link>
+          <div className="mt-9">
+            <Button size="lg" variant="primary" onClick={onPlay}>
+              Play game
+              <ArrowRight size={17} />
+            </Button>
           </div>
 
           {/* transit-line strip: the reveal schedule */}
@@ -122,6 +131,15 @@ export default function LandingPage() {
           />
         </footer>
       </div>
+
+      <AuthDialog
+        open={authOpen}
+        onOpenChange={setAuthOpen}
+        onAuthed={() => {
+          setAuthOpen(false);
+          router.push("/dashboard");
+        }}
+      />
     </main>
   );
 }
