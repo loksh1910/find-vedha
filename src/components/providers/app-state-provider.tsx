@@ -9,11 +9,15 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { createClient } from "@/lib/supabase/client";
 
 /* ------------------------------------------------------------------ *
- *  Mock, client-only app state. No backend (Phase 1).
- *  Session + created rooms live in localStorage so the flow survives
- *  reloads and Join can validate a code that Create just generated.
+ *  App state — real Supabase auth (Phase 2), rooms still mock.
+ *
+ *  `session` keeps its Phase-1 shape ({ username, avatarId }) so every
+ *  screen that reads `session?.username` keeps working unchanged; it's
+ *  now sourced from the `profiles` table instead of localStorage.
+ *  Room create / join are still localStorage until the next step.
  * ------------------------------------------------------------------ */
 
 export type Session = {
@@ -29,7 +33,8 @@ export type MockRoom = {
   createdAt: number;
 };
 
-const SESSION_KEY = "fv.session";
+type AuthResult = { error: string | null };
+
 const ROOMS_KEY = "fv.rooms";
 
 /** Always-valid demo code so Join can be tried without creating a room first. */
@@ -44,14 +49,37 @@ export const DEMO_ROOM: MockRoom = {
 type AppState = {
   hydrated: boolean;
   session: Session | null;
+  userId: string | null;
   isSignedIn: boolean;
-  signIn: (username: string, avatarId?: string) => void;
-  signOut: () => void;
+  isGuest: boolean;
+  signInWithPassword: (email: string, password: string) => Promise<AuthResult>;
+  signUp: (args: {
+    email: string;
+    password: string;
+    username: string;
+    avatarId: string;
+  }) => Promise<AuthResult>;
+  signInAsGuest: () => Promise<AuthResult>;
+  signOut: () => Promise<void>;
+  /** true when the username is free (and long enough) */
+  checkUsername: (username: string) => Promise<boolean>;
   createRoom: (name: string, maxPlayers: number) => MockRoom;
   findRoom: (code: string) => MockRoom | null;
 };
 
 const Ctx = createContext<AppState | null>(null);
+
+function friendlyAuthError(message: string): string {
+  const m = message.toLowerCase();
+  if (m.includes("invalid login credentials")) return "Wrong email or password.";
+  if (m.includes("already registered") || m.includes("already been registered"))
+    return "An account with that email already exists — sign in instead.";
+  if (m.includes("email not confirmed"))
+    return "Confirm your email first — check your inbox.";
+  if (m.includes("anonymous")) return "Guest access isn't enabled on the server yet.";
+  if (m.includes("password")) return message; // keep length/strength hints verbatim
+  return message;
+}
 
 function readRooms(): MockRoom[] {
   try {
@@ -64,8 +92,7 @@ function readRooms(): MockRoom[] {
 }
 
 function makeCode(): string {
-  // 6 chars, no ambiguous 0/O/1/I
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I
   let out = "";
   for (let i = 0; i < 6; i++) {
     out += alphabet[Math.floor(Math.random() * alphabet.length)];
@@ -74,49 +101,133 @@ function makeCode(): string {
 }
 
 export function AppStateProvider({ children }: { children: ReactNode }) {
+  const supabase = useMemo(() => createClient(), []);
   const [hydrated, setHydrated] = useState(false);
-  const [session, setSession] = useState<Session | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [isGuest, setIsGuest] = useState(false);
+  const [profile, setProfile] = useState<Session | null>(null);
+
+  const loadProfile = useCallback(
+    async (uid: string, meta?: Record<string, unknown>) => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("username, avatar_id")
+        .eq("id", uid)
+        .maybeSingle();
+      setProfile(
+        data
+          ? { username: data.username, avatarId: data.avatar_id }
+          : {
+              username: (meta?.username as string) || "Player",
+              avatarId: (meta?.avatar_id as string) || "tile-1",
+            },
+      );
+    },
+    [supabase],
+  );
 
   useEffect(() => {
-    // One-time hydration from localStorage on mount. A lazy useState initializer
-    // can't be used here (no localStorage during SSR → hydration mismatch).
-    /* eslint-disable react-hooks/set-state-in-effect */
-    try {
-      const raw = localStorage.getItem(SESSION_KEY);
-      if (raw) setSession(JSON.parse(raw) as Session);
-    } catch {
-      /* ignore */
-    }
-    setHydrated(true);
-    /* eslint-enable react-hooks/set-state-in-effect */
-  }, []);
+    let active = true;
 
-  const signIn = useCallback((username: string, avatarId = "tile-1") => {
-    const next: Session = { username: username.trim() || "Player", avatarId };
-    setSession(next);
-    try {
-      localStorage.setItem(SESSION_KEY, JSON.stringify(next));
-    } catch {
-      /* ignore */
-    }
-  }, []);
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!active) return;
+      const user = session?.user;
+      if (user) {
+        setUserId(user.id);
+        setIsGuest(user.is_anonymous ?? false);
+        await loadProfile(user.id, user.user_metadata);
+      }
+      setHydrated(true);
+    });
 
-  const signOut = useCallback(() => {
-    setSession(null);
-    try {
-      localStorage.removeItem(SESSION_KEY);
-    } catch {
-      /* ignore */
-    }
-  }, []);
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      const user = session?.user;
+      if (user) {
+        setUserId(user.id);
+        setIsGuest(user.is_anonymous ?? false);
+        void loadProfile(user.id, user.user_metadata);
+      } else {
+        setUserId(null);
+        setIsGuest(false);
+        setProfile(null);
+      }
+    });
+
+    return () => {
+      active = false;
+      sub.subscription.unsubscribe();
+    };
+  }, [supabase, loadProfile]);
+
+  const checkUsername = useCallback(
+    async (username: string): Promise<boolean> => {
+      const u = username.trim();
+      if (u.length < 3) return false;
+      const { data } = await supabase
+        .from("profiles")
+        .select("id")
+        .ilike("username", u)
+        .maybeSingle();
+      return !data;
+    },
+    [supabase],
+  );
+
+  const signInWithPassword = useCallback(
+    async (email: string, password: string): Promise<AuthResult> => {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+      return { error: error ? friendlyAuthError(error.message) : null };
+    },
+    [supabase],
+  );
+
+  const signUp = useCallback(
+    async ({
+      email,
+      password,
+      username,
+      avatarId,
+    }: {
+      email: string;
+      password: string;
+      username: string;
+      avatarId: string;
+    }): Promise<AuthResult> => {
+      const u = username.trim();
+      if (u.length < 3 || u.length > 16)
+        return { error: "Username must be 3–16 characters." };
+      if (!(await checkUsername(u))) return { error: "That username is taken." };
+      const { error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: { data: { username: u, avatar_id: avatarId } },
+      });
+      return { error: error ? friendlyAuthError(error.message) : null };
+    },
+    [supabase, checkUsername],
+  );
+
+  const signInAsGuest = useCallback(async (): Promise<AuthResult> => {
+    const { error } = await supabase.auth.signInAnonymously();
+    return {
+      error: error ? "Guest access isn't enabled on the server yet." : null,
+    };
+  }, [supabase]);
+
+  const signOut = useCallback(async () => {
+    await supabase.auth.signOut();
+  }, [supabase]);
 
   const createRoom = useCallback(
     (name: string, maxPlayers: number): MockRoom => {
       const room: MockRoom = {
         code: makeCode(),
-        name: name.trim() || `${session?.username ?? "New"}'s room`,
+        name: name.trim() || `${profile?.username ?? "New"}'s room`,
         maxPlayers,
-        hostName: session?.username ?? "You",
+        hostName: profile?.username ?? "You",
         createdAt: Date.now(),
       };
       try {
@@ -128,7 +239,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       }
       return room;
     },
-    [session],
+    [profile],
   );
 
   const findRoom = useCallback((code: string): MockRoom | null => {
@@ -141,14 +252,31 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AppState>(
     () => ({
       hydrated,
-      session,
-      isSignedIn: !!session,
-      signIn,
+      session: profile,
+      userId,
+      isSignedIn: !!userId,
+      isGuest,
+      signInWithPassword,
+      signUp,
+      signInAsGuest,
       signOut,
+      checkUsername,
       createRoom,
       findRoom,
     }),
-    [hydrated, session, signIn, signOut, createRoom, findRoom],
+    [
+      hydrated,
+      profile,
+      userId,
+      isGuest,
+      signInWithPassword,
+      signUp,
+      signInAsGuest,
+      signOut,
+      checkUsername,
+      createRoom,
+      findRoom,
+    ],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

@@ -7,7 +7,7 @@ import { inputClass } from "@/components/shell/auth-shell";
 import { useAppState } from "@/components/providers/app-state-provider";
 import { cn } from "@/lib/cn";
 
-/** Sign in / create account overlay. Mock auth — any name gets you in. */
+/** Sign in / create account overlay. */
 export function AuthDialog({
   open,
   onOpenChange,
@@ -17,19 +17,40 @@ export function AuthDialog({
   onOpenChange: (o: boolean) => void;
   onAuthed: () => void;
 }) {
-  const { signIn } = useAppState();
+  const { signInWithPassword, signUp, signInAsGuest } = useAppState();
   const [mode, setMode] = useState<"in" | "up">("in");
-  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   if (!open) return null;
 
-  const go = (username: string) => {
-    signIn(username || "Player");
+  const finish = (res: { error: string | null }) => {
+    setBusy(false);
+    if (res.error) {
+      setErr(res.error);
+      return;
+    }
     onAuthed();
   };
-  const submit = (e: FormEvent) => {
+
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
-    go(name);
+    setErr(null);
+    setBusy(true);
+    finish(
+      mode === "in"
+        ? await signInWithPassword(email, password)
+        : await signUp({ email, password, username, avatarId: "tile-1" }),
+    );
+  };
+
+  const guest = async () => {
+    setErr(null);
+    setBusy(true);
+    finish(await signInAsGuest());
   };
 
   return (
@@ -37,14 +58,21 @@ export function AuthDialog({
       open={open}
       onOpenChange={onOpenChange}
       title={mode === "in" ? "Sign in to play" : "Create your account"}
-      description="Mock auth for now — any name gets you in."
+      description={
+        mode === "in"
+          ? "Your rooms and games are saved to your account."
+          : "Pick a username — it's how other players see you."
+      }
     >
       <div className="mb-4 flex gap-1 rounded-md border border-line p-1 text-sm">
         {(["in", "up"] as const).map((m) => (
           <button
             key={m}
             type="button"
-            onClick={() => setMode(m)}
+            onClick={() => {
+              setMode(m);
+              setErr(null);
+            }}
             className={cn(
               "flex-1 rounded-[5px] px-3 py-1.5 transition-colors",
               mode === m ? "bg-surface-2 text-text" : "text-muted hover:text-text",
@@ -58,19 +86,47 @@ export function AuthDialog({
       <form onSubmit={submit} className="space-y-3">
         <input
           className={inputClass}
+          type="email"
           placeholder="you@example.com"
           autoFocus
-          value={name}
-          onChange={(e) => setName(e.target.value)}
+          autoComplete="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
         />
-        <input className={inputClass} type="password" placeholder="••••••••" />
-        <Button type="submit" variant="primary" className="w-full">
-          {mode === "in" ? "Sign in" : "Create account"}
+        {mode === "up" && (
+          <input
+            className={inputClass}
+            placeholder="username"
+            autoComplete="username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+          />
+        )}
+        <input
+          className={inputClass}
+          type="password"
+          placeholder="••••••••"
+          autoComplete={mode === "in" ? "current-password" : "new-password"}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+
+        {err && <p className="text-xs text-danger">{err}</p>}
+
+        <Button type="submit" variant="primary" className="w-full" disabled={busy}>
+          {busy
+            ? mode === "in"
+              ? "Signing in…"
+              : "Creating…"
+            : mode === "in"
+              ? "Sign in"
+              : "Create account"}
         </Button>
         <button
           type="button"
-          onClick={() => go("Guest")}
-          className="w-full text-center text-xs text-faint hover:text-muted"
+          onClick={guest}
+          disabled={busy}
+          className="w-full text-center text-xs text-faint hover:text-muted disabled:opacity-50"
         >
           Skip — continue as a guest
         </button>

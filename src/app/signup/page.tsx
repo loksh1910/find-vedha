@@ -14,13 +14,24 @@ const AVATARS = ["tile-1", "tile-2", "tile-3", "tile-4", "tile-5", "tile-6"];
 
 export default function SignupPage() {
   const router = useRouter();
-  const { signIn } = useAppState();
+  const { signUp } = useAppState();
+  const [email, setEmail] = useState("");
   const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
   const [avatarId, setAvatarId] = useState(AVATARS[0]);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
-    signIn(name || "Player", avatarId);
+    setErr(null);
+    setBusy(true);
+    const res = await signUp({ email, password, username: name, avatarId });
+    setBusy(false);
+    if (res.error) {
+      setErr(res.error);
+      return;
+    }
     router.push("/dashboard");
   }
 
@@ -39,7 +50,14 @@ export default function SignupPage() {
     >
       <form onSubmit={submit} className="space-y-4">
         <Field label="Email">
-          <input className={inputClass} type="email" placeholder="you@example.com" />
+          <input
+            className={inputClass}
+            type="email"
+            autoComplete="email"
+            placeholder="you@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
         </Field>
         <Field label="Username" hint="Shown to other players. 3–16 characters.">
           <input
@@ -47,11 +65,19 @@ export default function SignupPage() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. arjun_r"
+            autoComplete="username"
             autoFocus
           />
         </Field>
-        <Field label="Password">
-          <input className={inputClass} type="password" placeholder="••••••••" />
+        <Field label="Password" hint="At least 6 characters.">
+          <input
+            className={inputClass}
+            type="password"
+            autoComplete="new-password"
+            placeholder="••••••••"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
         </Field>
 
         <div>
@@ -88,8 +114,10 @@ export default function SignupPage() {
           <span>I agree to the (placeholder) terms and privacy notice.</span>
         </label>
 
-        <Button type="submit" variant="primary" className="w-full">
-          Create account
+        {err && <p className="text-xs text-danger">{err}</p>}
+
+        <Button type="submit" variant="primary" className="w-full" disabled={busy}>
+          {busy ? "Creating account…" : "Create account"}
         </Button>
       </form>
     </AuthShell>
