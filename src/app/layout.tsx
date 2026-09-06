@@ -30,6 +30,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
+      suppressHydrationWarning
       className={`${bricolage.variable} ${poppins.variable} ${plexMono.variable} h-full`}
     >
       <body className="min-h-full">

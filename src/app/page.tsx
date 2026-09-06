@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 import { Logo } from "@/components/shell/logo";
 import { MagnifyMap } from "@/components/landing/magnify-map";
 import { MapChatter } from "@/components/landing/map-chatter";
+import { CardRing } from "@/components/landing/card-ring";
 import { GameModeDialog } from "@/components/landing/game-mode-dialog";
 import { AuthDialog } from "@/components/auth/auth-dialog";
 import { ProfileMenu } from "@/components/auth/profile-menu";
@@ -14,29 +15,27 @@ import { ManualDialog } from "@/components/manual/manual-dialog";
 import { Button } from "@/components/ui/button";
 import { useAppState } from "@/components/providers/app-state-provider";
 
-const STEPS = [
-  {
-    n: "01",
-    title: "Make a private room",
-    body: "One tap gives you a six-character code. Share it with friends — no one else can get in.",
-  },
-  {
-    n: "02",
-    title: "One of you is Vedha",
-    body: "Claim a role in the lobby against a ten-second clock. Whatever's left is dealt at random.",
-  },
-  {
-    n: "03",
-    title: "The Detectives hunt the map",
-    body: "Vedha moves in secret across Auto, Bus and Metro lines. Surface on rounds 3, 8, 13, 18 and 24.",
-  },
-];
-
 const REVEALS = [3, 8, 13, 18, 24];
+
+/** Desktop + motion-OK: the landing runs the pinned rotating card ring. */
+function useInteractive() {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia(
+      "(min-width: 1024px) and (prefers-reduced-motion: no-preference)",
+    );
+    const sync = () => setOn(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+  return on;
+}
 
 export default function LandingPage() {
   const router = useRouter();
   const { hydrated, isSignedIn } = useAppState();
+  const interactive = useInteractive();
   const [authOpen, setAuthOpen] = useState(false);
   const [modeOpen, setModeOpen] = useState(false);
 
@@ -47,13 +46,17 @@ export default function LandingPage() {
   };
 
   return (
-    <main className="relative min-h-dvh">
+    <main className="relative">
       <MagnifyMap />
       {/* keep the copy readable over the map */}
       <div className="pointer-events-none fixed inset-0 bg-gradient-to-b from-bg/75 via-bg/45 to-bg/90" />
       <MapChatter />
 
-      <div className="relative z-10 mx-auto flex min-h-dvh max-w-[1100px] flex-col px-6 md:px-10">
+      <div
+        className={`relative z-10 mx-auto flex max-w-[1100px] flex-col px-6 md:px-10 ${
+          interactive ? "h-dvh overflow-hidden" : "min-h-dvh"
+        }`}
+      >
         <header className="flex items-center justify-between py-5">
           <span data-chatter-avoid>
             <Logo />
@@ -75,7 +78,13 @@ export default function LandingPage() {
           </nav>
         </header>
 
-        <section className="flex flex-1 flex-col items-center justify-center py-16 text-center">
+        <section
+          className={`flex flex-1 flex-col justify-center py-16 ${
+            interactive
+              ? "items-center text-center lg:max-w-[560px] lg:items-start lg:text-left"
+              : "items-center text-center"
+          }`}
+        >
           <p data-chatter-avoid data-chatter-core className="eyebrow">
             A hidden-chase game on the Chennai transit map
           </p>
@@ -128,29 +137,22 @@ export default function LandingPage() {
             </svg>
           </div>
         </section>
-
-        <section className="border-t border-line py-14">
-          <h2 className="font-display text-xl font-bold text-text">How a game goes</h2>
-          <ol className="mt-6 grid gap-8 sm:grid-cols-3">
-            {STEPS.map((s) => (
-              <li key={s.n}>
-                <div className="font-mono text-sm text-signal">{s.n}</div>
-                <div className="mt-2 font-display text-base font-semibold text-text">
-                  {s.title}
-                </div>
-                <p className="mt-2 text-sm leading-relaxed text-muted">{s.body}</p>
-              </li>
-            ))}
-          </ol>
-        </section>
-
-        <footer className="flex flex-col gap-2 border-t border-line py-6 text-xs text-faint sm:flex-row sm:items-center sm:justify-between">
-          <span>An original game. Not affiliated with any existing product.</span>
-          <ManualDialog
-            trigger={<button className="text-faint underline-offset-2 hover:text-muted hover:underline">How to play</button>}
-          />
-        </footer>
       </div>
+
+      <CardRing interactive={interactive} />
+
+      <footer
+        className={
+          interactive
+            ? "fixed inset-x-0 bottom-0 z-20 flex items-center justify-between gap-4 border-t border-line bg-bg/70 px-6 py-2.5 text-xs text-faint backdrop-blur-sm md:px-10"
+            : "relative z-10 mx-auto flex max-w-[1100px] flex-col gap-2 border-t border-line px-6 py-6 text-xs text-faint sm:flex-row sm:items-center sm:justify-between md:px-10"
+        }
+      >
+        <span>An original game. Not affiliated with any existing product.</span>
+        <ManualDialog
+          trigger={<button className="text-faint underline-offset-2 hover:text-muted hover:underline">How to play</button>}
+        />
+      </footer>
 
       <AuthDialog
         open={authOpen}
