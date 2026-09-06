@@ -4,7 +4,6 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type FormEvent,
 } from "react";
@@ -19,6 +18,7 @@ import {
   Plus,
   RotateCcw,
   Send,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -29,6 +29,7 @@ import { SlotCard } from "./slot-card";
 import { TransitionOverlay } from "./transition-overlay";
 import { LobbyVideo } from "./lobby-video";
 import { CameraPrompt } from "@/components/media/camera-prompt";
+import { useLobbyChannel } from "./use-lobby-channel";
 import { useAppState } from "@/components/providers/app-state-provider";
 import {
   ALL_SLOTS,
@@ -37,7 +38,6 @@ import {
   slotDef,
   type SlotId,
 } from "@/lib/roles";
-import { BOT_CLAIM_SCRIPT, LOBBY_BOTS, LOBBY_CHAT_SEED } from "@/lib/mock";
 import { cn } from "@/lib/cn";
 
 type Phase = "roster" | "selecting" | "locked" | "ready" | "countdown" | "starting";
@@ -48,6 +48,7 @@ type Player = {
   isHost?: boolean;
   isMe?: boolean;
 };
+type Claims = Partial<Record<SlotId, string>>;
 
 const SELECT_MS = 10_000;
 const COUNTDOWN_MS = 5_000;
@@ -55,9 +56,32 @@ const SOLO_COUNTDOWN_MS = 10_000;
 const ME = "me";
 const CPU = "cpu";
 
+/** the caller's id for claim / ready checks — "me" in solo, the real uid otherwise */
+function nextClaims(prev: Claims, slotId: SlotId, myId: string): Claims {
+  const held = prev[slotId];
+  if (held && held !== myId) return prev; // someone else has it
+  if (held === myId) {
+    const next = { ...prev };
+    delete next[slotId];
+    return next;
+  }
+  const mine = (Object.keys(prev) as SlotId[]).filter((k) => prev[k] === myId);
+  const iHoldVedha = mine.some((k) => slotDef(k).kind === "vedha");
+  if (slotDef(slotId).kind === "vedha") {
+    const next: Claims = {};
+    for (const k of Object.keys(prev) as SlotId[]) {
+      if (prev[k] !== myId) next[k] = prev[k];
+    }
+    next[slotId] = myId;
+    return next;
+  }
+  if (iHoldVedha) return prev; // the Vedha player can't also be a Detective
+  return { ...prev, [slotId]: myId }; // Detectives can be shared
+}
+
 export function LobbyClient({ code, solo = false }: { code: string; solo?: boolean }) {
   const router = useRouter();
-  const { hydrated, session, findRoom } = useAppState();
+  const { hydrated, session, userId, findRoom, joinRoom } = useAppState();
   const cdMs = solo ? SOLO_COUNTDOWN_MS : COUNTDOWN_MS;
 
   const fallbackRoom = useMemo(
@@ -74,127 +98,179 @@ export function LobbyClient({ code, solo = false }: { code: string; solo?: boole
     [code, session?.username],
   );
 
-  const allPlayers = useMemo<Player[]>(() => {
-    const me: Player = {
-      id: ME,
-      name: session?.username ?? "You",
-      avatarId: session?.avatarId,
-      isHost: true,
-      isMe: true,
-    };
-    if (solo) return [me, { id: CPU, name: "Computer", avatarId: "tile-6" }];
-    return [me, ...LOBBY_BOTS.map((b) => ({ id: b.id, name: b.name, avatarId: b.avatarId }))];
-  }, [session?.username, session?.avatarId, solo]);
-
-  const [cap, setCap] = useState(6);
-
-  // The real room row loads once, after auth hydration. Until then the
-  // fallback keeps the lobby rendering exactly as it did on mock state.
-  const [room, setRoom] = useState(fallbackRoom);
+  // the room row (id, name, host, max) — loaded once after auth hydrates
+  const [meta, setMeta] = useState(fallbackRoom);
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || solo) return;
     let ok = true;
-    findRoom(code).then((r) => {
-      if (!ok || !r) return;
-      setRoom(r);
-      setCap(Math.min(r.maxPlayers, 6));
+    findRoom(code).then(async (r) => {
+      if (!ok) return;
+      if (r) {
+        setMeta(r);
+        return;
+      }
+      // reached by a shared link without going through Join — try to join now
+      const res = await joinRoom(code);
+      if (!ok) return;
+      if (res.ok) setMeta(res.room);
+      else router.replace("/dashboard");
     });
     return () => {
       ok = false;
     };
-  }, [hydrated, findRoom, code]);
+  }, [hydrated, solo, findRoom, joinRoom, code, router]);
 
-  const players = useMemo(() => allPlayers.slice(0, cap), [allPlayers, cap]);
+  const me =
+    !solo && userId && session ? { id: userId, name: session.username } : null;
+  const lobby = useLobbyChannel(solo ? null : meta.id || null, code, me);
+  const myId = solo ? ME : (userId ?? ME);
+
+  // ---- shared lobby state; for multiplayer it mirrors the realtime room ----
+  const [phase, setPhase] = useState<Phase>(solo ? "selecting" : "roster");
+  const [claims, setClaims] = useState<Claims>({});
+  const [readyIds, setReadyIds] = useState<string[]>([]);
+  const [deadline, setDeadline] = useState(0); // start_deadline (5s countdown)
+  const [selectDeadline, setSelectDeadline] = useState(0); // 10s claim clock
+  const [now, setNow] = useState(() => Date.now());
+  const [soloCap, setSoloCap] = useState(6);
+  const [chatLocal, setChatLocal] = useState<{ from: string; text: string }[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  // mirror the realtime room row into local state
+  useEffect(() => {
+    if (solo || !lobby.roomRow) return;
+    const r = lobby.roomRow;
+    /* eslint-disable react-hooks/set-state-in-effect -- sync external row → local */
+    setPhase(r.status as Phase);
+    setClaims((r.claims ?? {}) as Claims);
+    setReadyIds(r.ready ?? []);
+    setSelectDeadline(r.select_deadline ? Date.parse(r.select_deadline) : 0);
+    setDeadline(r.start_deadline ? Date.parse(r.start_deadline) : 0);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [solo, lobby.roomRow]);
+
+  const roomReady = solo || !!lobby.roomRow;
+  const room = solo
+    ? meta
+    : {
+        ...meta,
+        name: lobby.roomRow?.name ?? meta.name,
+        maxPlayers: lobby.roomRow?.max_players ?? meta.maxPlayers,
+        hostId: lobby.roomRow?.host_id ?? meta.hostId,
+        status: lobby.roomRow?.status ?? meta.status,
+      };
+  const isHost = !solo && !!userId && room.hostId === userId;
+  const cap = solo ? soloCap : room.maxPlayers;
+
+  const players = useMemo<Player[]>(() => {
+    if (solo) {
+      return [
+        {
+          id: ME,
+          name: session?.username ?? "You",
+          avatarId: session?.avatarId,
+          isHost: true,
+          isMe: true,
+        },
+        { id: CPU, name: "Computer", avatarId: "tile-6" },
+      ];
+    }
+    return lobby.members.map((m) => ({
+      id: m.userId,
+      name: m.username,
+      avatarId: m.avatarId,
+      isHost: m.userId === room.hostId,
+      isMe: m.userId === userId,
+    }));
+  }, [solo, session?.username, session?.avatarId, lobby.members, room.hostId, userId]);
+
   const playerById = useCallback(
     (id?: string) => players.find((p) => p.id === id),
     [players],
   );
 
-  const [phase, setPhase] = useState<Phase>(solo ? "selecting" : "roster");
-  const [claims, setClaims] = useState<Partial<Record<SlotId, string>>>({});
-  const claimsRef = useRef(claims);
+  const chat = solo ? chatLocal : lobby.chat;
+
+  /* ---- tick a clock while a deadline is live ---- */
   useEffect(() => {
-    claimsRef.current = claims;
-  }, [claims]);
+    if (phase !== "selecting" && phase !== "countdown") return;
+    const iv = setInterval(() => setNow(Date.now()), 100);
+    return () => clearInterval(iv);
+  }, [phase]);
 
-  const [now, setNow] = useState(() => Date.now());
-  const [deadline, setDeadline] = useState(0);
-
-  const [feed, setFeed] = useState<string[]>([]);
-  const [chat, setChat] = useState<{ from: string; text: string }[]>([]);
-  const [chatInput, setChatInput] = useState("");
-  const [ready, setReady] = useState<Set<string>>(new Set());
-  const [copied, setCopied] = useState(false);
-
-  /* ---- selecting: 10s clock + scripted bot claims + seeded chat ---- */
+  /* ---- host drives the phase machine (multiplayer) ---- */
   useEffect(() => {
-    if (phase !== "selecting" || solo) return;
-    const ids = players.map((p) => p.id);
+    if (solo || !isHost) return;
 
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    for (const { at, botId, slot } of BOT_CLAIM_SCRIPT) {
-      if (!ids.includes(botId)) continue;
-      timers.push(
-        setTimeout(() => {
-          setClaims((prev) => (prev[slot] ? prev : { ...prev, [slot]: botId }));
-          const bot = LOBBY_BOTS.find((b) => b.id === botId);
-          setFeed((f) => [`${bot?.name} claimed ${slotDef(slot).label}`, ...f]);
-        }, at),
-      );
-    }
-    for (const { at, from, text } of LOBBY_CHAT_SEED) {
-      timers.push(setTimeout(() => setChat((c) => [...c, { from, text }]), at));
+    if (phase === "selecting" && selectDeadline) {
+      const iv = setInterval(() => {
+        if (Date.now() >= selectDeadline) {
+          clearInterval(iv);
+          void lobby.patchRoom({
+            claims: autoFill(
+              players.map((p) => p.id),
+              claims,
+            ) as Record<string, string>,
+            status: "locked",
+            select_deadline: null,
+          });
+        }
+      }, 250);
+      return () => clearInterval(iv);
     }
 
+    if (phase === "locked") {
+      const t = setTimeout(() => void lobby.patchRoom({ status: "ready" }), 1600);
+      return () => clearTimeout(t);
+    }
+
+    if (
+      phase === "ready" &&
+      players.length >= 2 &&
+      players.every((p) => readyIds.includes(p.id))
+    ) {
+      void lobby.patchRoom({
+        status: "countdown",
+        start_deadline: new Date(Date.now() + COUNTDOWN_MS).toISOString(),
+      });
+    }
+
+    if (phase === "countdown" && deadline) {
+      const iv = setInterval(() => {
+        if (Date.now() >= deadline) {
+          clearInterval(iv);
+          void lobby.patchRoom({ status: "starting" });
+        }
+      }, 100);
+      return () => clearInterval(iv);
+    }
+  }, [solo, isHost, phase, selectDeadline, deadline, players, readyIds, claims, lobby]);
+
+  /* ---- host migration: if the host has left, the earliest joiner takes over ---- */
+  useEffect(() => {
+    if (solo || !lobby.roomRow || lobby.members.length === 0) return;
+    const hostHere = lobby.members.some((m) => m.userId === lobby.roomRow!.host_id);
+    if (hostHere) return;
+    if (lobby.members[0].userId === userId) {
+      void lobby.patchRoom({ host_id: userId! });
+    }
+  }, [solo, lobby, userId]);
+
+  /* ---- solo countdown clock ---- */
+  useEffect(() => {
+    if (!solo || phase !== "countdown") return;
     const iv = setInterval(() => {
       setNow(Date.now());
       if (deadline - Date.now() <= 0) {
         clearInterval(iv);
-        setClaims(autoFill(ids, claimsRef.current));
-        setFeed((f) => ["The clock filled the open slots", ...f]);
-        setPhase("locked");
+        setPhase("starting");
       }
-    }, 200);
+    }, 100);
+    return () => clearInterval(iv);
+  }, [solo, phase, deadline]);
 
-    return () => {
-      clearInterval(iv);
-      timers.forEach(clearTimeout);
-    };
-  }, [phase, players, deadline, solo]);
-
-  /* ---- locked: brief "roles are set" beat ---- */
-  useEffect(() => {
-    if (phase !== "locked") return;
-    const t = setTimeout(() => setPhase("ready"), 1600);
-    return () => clearTimeout(t);
-  }, [phase]);
-
-  /* ---- ready: bots ready up on a stagger ---- */
-  useEffect(() => {
-    if (phase !== "ready" || solo) return;
-    const timers = players
-      .filter((p) => !p.isMe)
-      .map((p, i) =>
-        setTimeout(() => setReady((r) => new Set(r).add(p.id)), 800 + i * 600),
-      );
-    return () => timers.forEach(clearTimeout);
-  }, [phase, players, solo]);
-
-  /* ---- everyone ready -> 5s countdown ----
-     Deliberate synchronous phase advance: readiness is driven by external
-     timers (bots) and the Ready toggle, so an effect is the join point. */
-  useEffect(() => {
-    if (phase === "ready" && players.every((p) => ready.has(p.id))) {
-      /* eslint-disable react-hooks/set-state-in-effect */
-      setNow(Date.now());
-      setDeadline(Date.now() + COUNTDOWN_MS);
-      setPhase("countdown");
-      /* eslint-enable react-hooks/set-state-in-effect */
-    }
-  }, [phase, ready, players]);
-
-  /* ---- hand the final table roster to the game, so its video grid shows
-     one tile per real player (not one per pawn) ---- */
+  /* ---- hand the final roster to the game (one video tile per real player) ---- */
   useEffect(() => {
     if (phase !== "starting") return;
     try {
@@ -213,67 +289,45 @@ export function LobbyClient({ code, solo = false }: { code: string; solo?: boole
     }
   }, [phase, players, claims, code, solo]);
 
-  /* ---- countdown: 5s, cancellable by un-readying ---- */
-  useEffect(() => {
-    if (phase !== "countdown") return;
-    const iv = setInterval(() => {
-      setNow(Date.now());
-      if (deadline - Date.now() <= 0) {
-        clearInterval(iv);
-        setPhase("starting");
-      }
-    }, 100);
-    return () => clearInterval(iv);
-  }, [phase, deadline]);
+  const remaining = Math.max(
+    0,
+    (phase === "selecting" ? selectDeadline : deadline) - now,
+  );
 
-  const remaining = Math.max(0, deadline - now);
+  const applyClaims = useCallback(
+    (next: Claims) => {
+      if (solo) setClaims(next);
+      else void lobby.patchRoom({ claims: next as Record<string, string> });
+    },
+    [solo, lobby],
+  );
 
-  const onSlotClick = useCallback((slotId: SlotId) => {
-    setClaims((prev) => {
-      const held = prev[slotId];
-      if (held && held !== ME) return prev; // someone else has it
+  const onSlotClick = useCallback(
+    (slotId: SlotId) => applyClaims(nextClaims(claims, slotId, myId)),
+    [applyClaims, claims, myId],
+  );
 
-      // clicking a slot I already hold releases just that one
-      if (held === ME) {
-        const next = { ...prev };
-        delete next[slotId];
-        return next;
-      }
-
-      const mine = (Object.keys(prev) as SlotId[]).filter((k) => prev[k] === ME);
-      const iHoldVedha = mine.some((k) => slotDef(k).kind === "vedha");
-
-      if (slotDef(slotId).kind === "vedha") {
-        // Vedha is exclusive — take it, drop any Detective slots I was holding
-        const next: Partial<Record<SlotId, string>> = {};
-        for (const k of Object.keys(prev) as SlotId[]) {
-          if (prev[k] !== ME) next[k] = prev[k];
-        }
-        next[slotId] = ME;
-        return next;
-      }
-
-      // clicking a Detective slot
-      if (iHoldVedha) return prev; // the Vedha player can't also be a Detective
-      return { ...prev, [slotId]: ME }; // Detectives can be shared — add this one
-    });
-  }, []);
-
-  function toggleMyReady() {
-    setReady((r) => {
-      const next = new Set(r);
-      if (next.has(ME)) next.delete(ME);
-      else next.add(ME);
-      return next;
-    });
-    if (phase === "countdown") setPhase("ready");
-  }
+  const toggleMyReady = useCallback(() => {
+    const has = readyIds.includes(myId);
+    const next = has ? readyIds.filter((x) => x !== myId) : [...readyIds, myId];
+    if (solo) {
+      setReadyIds(next);
+      if (phase === "countdown") setPhase("ready");
+      return;
+    }
+    void lobby.patchRoom(
+      phase === "countdown"
+        ? { ready: next, status: "ready", start_deadline: null }
+        : { ready: next },
+    );
+  }, [readyIds, myId, solo, phase, lobby]);
 
   function sendChat(e: FormEvent) {
     e.preventDefault();
     const text = chatInput.trim();
     if (!text) return;
-    setChat((c) => [...c, { from: session?.username ?? "You", text }]);
+    if (solo) setChatLocal((c) => [...c, { from: session?.username ?? "You", text }]);
+    else lobby.sendChat(text);
     setChatInput("");
   }
 
@@ -283,19 +337,34 @@ export function LobbyClient({ code, solo = false }: { code: string; solo?: boole
     setTimeout(() => setCopied(false), 1600);
   }
 
-  function restart() {
-    setPhase(solo ? "selecting" : "roster");
+  function lockRoster() {
+    void lobby.patchRoom({
+      status: "selecting",
+      select_deadline: new Date(Date.now() + SELECT_MS).toISOString(),
+    });
+  }
+
+  function setMax(n: number) {
+    if (solo) setSoloCap(n);
+    else void lobby.patchRoom({ max_players: n });
+  }
+
+  async function leave() {
+    if (!solo) await lobby.leave();
+    router.push("/dashboard");
+  }
+
+  function restartSolo() {
+    setPhase("selecting");
     setClaims({});
-    setReady(new Set());
-    setFeed([]);
-    setChat([]);
+    setReadyIds([]);
+    setChatLocal([]);
     setDeadline(0);
   }
 
-  /** solo: lock in your pick, give every other role to the computer, count down */
   function startSolo() {
     setClaims((prev) => {
-      const filled = { ...prev };
+      const filled: Claims = { ...prev };
       for (const s of ALL_SLOTS) if (!filled[s.id]) filled[s.id] = CPU;
       return filled;
     });
@@ -305,12 +374,13 @@ export function LobbyClient({ code, solo = false }: { code: string; solo?: boole
   }
 
   const assignments = assignmentsFor(claims);
-  const readyCount = players.filter((p) => ready.has(p.id)).length;
-  const myClaim = (Object.values(claims) as string[]).includes(ME);
+  const readyCount = players.filter((p) => readyIds.includes(p.id)).length;
+  const myClaim = (Object.values(claims) as string[]).includes(myId);
   const showBoardInteractive = phase === "selecting";
-  const showAssignments = phase === "locked" || phase === "ready" || phase === "countdown";
+  const showAssignments =
+    phase === "locked" || phase === "ready" || phase === "countdown";
 
-  if (hydrated && !session) {
+  if (hydrated && !solo && !session) {
     return (
       <main className="grid min-h-dvh place-items-center px-6 text-center">
         <div>
@@ -350,14 +420,16 @@ export function LobbyClient({ code, solo = false }: { code: string; solo?: boole
         </button>
 
         <div className="ml-auto flex items-center gap-1">
-          <button
-            onClick={restart}
-            title="Restart the mock flow"
-            className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-2 text-xs text-faint hover:bg-surface-2 hover:text-muted"
-          >
-            <RotateCcw size={13} />
-            Restart demo
-          </button>
+          {solo && (
+            <button
+              onClick={restartSolo}
+              title="Start this solo lobby over"
+              className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-2 text-xs text-faint hover:bg-surface-2 hover:text-muted"
+            >
+              <RotateCcw size={13} />
+              Restart
+            </button>
+          )}
           <ManualDialog
             trigger={
               <button className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted hover:bg-surface-2 hover:text-text">
@@ -367,7 +439,7 @@ export function LobbyClient({ code, solo = false }: { code: string; solo?: boole
             }
           />
           <button
-            onClick={() => router.push("/dashboard")}
+            onClick={leave}
             className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted hover:bg-surface-2 hover:text-danger"
           >
             <LogOut size={15} />
@@ -423,7 +495,7 @@ export function LobbyClient({ code, solo = false }: { code: string; solo?: boole
                     key={slot.id}
                     slot={slot}
                     holder={holder ? { name: holder.name, avatarId: holder.avatarId } : undefined}
-                    isMe={claims[slot.id] === ME}
+                    isMe={claims[slot.id] === myId}
                     interactive={showBoardInteractive}
                     onClick={() => onSlotClick(slot.id)}
                   />
@@ -479,15 +551,6 @@ export function LobbyClient({ code, solo = false }: { code: string; solo?: boole
               </p>
             </div>
           )}
-
-          {/* selection feed */}
-          {phase === "selecting" && feed.length > 0 && (
-            <ul className="mt-4 space-y-1 font-mono text-xs text-faint">
-              {feed.slice(0, 4).map((line, i) => (
-                <li key={i}>— {line}</li>
-              ))}
-            </ul>
-          )}
         </section>
 
         {/* right rail: players + chat */}
@@ -510,10 +573,19 @@ export function LobbyClient({ code, solo = false }: { code: string; solo?: boole
                     <span
                       className={cn(
                         "h-2 w-2 rounded-full",
-                        ready.has(p.id) ? "bg-ok" : "bg-line-strong",
+                        readyIds.includes(p.id) ? "bg-ok" : "bg-line-strong",
                       )}
-                      aria-label={ready.has(p.id) ? "Ready" : "Not ready"}
+                      aria-label={readyIds.includes(p.id) ? "Ready" : "Not ready"}
                     />
+                  )}
+                  {isHost && !p.isMe && phase === "roster" && (
+                    <button
+                      onClick={() => lobby.kick(p.id)}
+                      aria-label={`Remove ${p.name}`}
+                      className="text-faint hover:text-danger"
+                    >
+                      <X size={13} />
+                    </button>
                   )}
                 </li>
               ))}
@@ -550,48 +622,48 @@ export function LobbyClient({ code, solo = false }: { code: string; solo?: boole
 
       {/* bottom bar */}
       <footer className="border-t border-line px-4 py-3 md:px-6">
-        {phase === "roster" && (
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-muted">Max players</span>
-              <button
-                aria-label="Fewer players"
-                onClick={() => setCap((n) => Math.max(2, n - 1))}
-                disabled={cap <= 2}
-                className="grid h-8 w-8 place-items-center rounded-md border border-line-strong text-muted hover:text-text disabled:opacity-40"
+        {phase === "roster" &&
+          (isHost ? (
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-muted">Max players</span>
+                <button
+                  aria-label="Fewer players"
+                  onClick={() => setMax(Math.max(2, cap - 1))}
+                  disabled={cap <= 2 || !roomReady}
+                  className="grid h-8 w-8 place-items-center rounded-md border border-line-strong text-muted hover:text-text disabled:opacity-40"
+                >
+                  <Minus size={13} />
+                </button>
+                <span className="w-5 text-center font-mono text-text">{cap}</span>
+                <button
+                  aria-label="More players"
+                  onClick={() => setMax(Math.min(6, cap + 1))}
+                  disabled={cap >= 6 || !roomReady}
+                  className="grid h-8 w-8 place-items-center rounded-md border border-line-strong text-muted hover:text-text disabled:opacity-40"
+                >
+                  <Plus size={13} />
+                </button>
+              </div>
+              <div className="flex items-center gap-2 opacity-60">
+                <span className="text-sm text-muted">AI Detectives</span>
+                <Switch checked={false} disabled aria-label="Fill empty slots with AI (coming soon)" />
+                <span className="font-mono text-[0.625rem] text-faint">soon</span>
+              </div>
+              <Button
+                variant="primary"
+                className="ml-auto"
+                onClick={lockRoster}
+                disabled={players.length < 2 || !roomReady}
               >
-                <Minus size={13} />
-              </button>
-              <span className="w-5 text-center font-mono text-text">{cap}</span>
-              <button
-                aria-label="More players"
-                onClick={() => setCap((n) => Math.min(6, n + 1))}
-                disabled={cap >= 6}
-                className="grid h-8 w-8 place-items-center rounded-md border border-line-strong text-muted hover:text-text disabled:opacity-40"
-              >
-                <Plus size={13} />
-              </button>
+                Lock roster &amp; start role selection
+              </Button>
             </div>
-            <div className="flex items-center gap-2 opacity-60">
-              <span className="text-sm text-muted">AI Detectives</span>
-              <Switch checked={false} disabled aria-label="Fill empty slots with AI (coming soon)" />
-              <span className="font-mono text-[0.625rem] text-faint">soon</span>
-            </div>
-            <Button
-              variant="primary"
-              className="ml-auto"
-              onClick={() => {
-                setFeed([]);
-                setNow(Date.now());
-                setDeadline(Date.now() + SELECT_MS);
-                setPhase("selecting");
-              }}
-              disabled={players.length < 2}
-            >
-              Lock roster &amp; start role selection
-            </Button>
-          </div>
-        )}
+          ) : (
+            <p className="text-center text-sm text-muted">
+              Waiting for the host to start role selection…
+            </p>
+          ))}
 
         {phase === "selecting" && !solo && (
           <p className="text-center text-sm text-muted">
@@ -624,9 +696,9 @@ export function LobbyClient({ code, solo = false }: { code: string; solo?: boole
             </span>
             <label className="flex items-center gap-3">
               <span className="text-sm text-text">
-                {ready.has(ME) ? "You're ready" : "Mark yourself ready"}
+                {readyIds.includes(myId) ? "You're ready" : "Mark yourself ready"}
               </span>
-              <Switch checked={ready.has(ME)} onCheckedChange={toggleMyReady} aria-label="Ready" />
+              <Switch checked={readyIds.includes(myId)} onCheckedChange={toggleMyReady} aria-label="Ready" />
             </label>
           </div>
         )}
