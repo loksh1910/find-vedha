@@ -47,7 +47,7 @@ function clampPan(k: number, tx: number, ty: number) {
 }
 
 export function BoardCanvas() {
-  const { game, viewAs, vedhaVisible, lastKnown, legalDest, pending, pickNode, myTurn } =
+  const { game, viewAs, vedhaVisible, lastKnown, legalDest, pending, chosenTransport, pickNode, myTurn } =
     useGame();
   const svgRef = useRef<SVGSVGElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -154,12 +154,30 @@ export function BoardCanvas() {
   const metroEdges = useMemo(() => BOARD.edges.filter((e) => e.mode === "metro"), []);
   const riverEdges = useMemo(() => BOARD.edges.filter((e) => e.mode === "river"), []);
 
-  const pendingEdge = useMemo(() => {
+  // Highlight the *actual* road path between the mover and the target — for a
+  // bus/metro hop that's a multi-segment polyline along the streets, not a
+  // straight line across the map. Follows whichever transport is being previewed.
+  const pendingRoute = useMemo(() => {
     if (!pending) return null;
     const from = game.pawns[game.turn]?.node;
     if (from == null) return null;
-    return { a: nodeById(from), b: nodeById(pending.to) };
-  }, [pending, game]);
+    const to = pending.to;
+    const opt =
+      pending.options.find((o) => o.transport === chosenTransport) ?? pending.options[0];
+    const edge = BOARD.edges.find(
+      (e) =>
+        e.mode === opt.via &&
+        ((e.a === from && e.b === to) || (e.a === to && e.b === from)),
+    );
+    let ids: number[] = [from, to];
+    if (edge?.path && edge.path.length >= 2) {
+      ids = edge.path[0] === from ? edge.path : [...edge.path].reverse();
+    }
+    return ids.map((id) => {
+      const n = nodeById(id);
+      return `${n.x},${n.y}`;
+    }).join(" ");
+  }, [pending, game, chosenTransport]);
 
   return (
     <div ref={wrapRef} className="relative h-full w-full overflow-hidden bg-game-canvas">
@@ -273,16 +291,11 @@ export function BoardCanvas() {
             })}
           </g>
 
-          {pendingEdge && (
-            <line
-              x1={pendingEdge.a.x}
-              y1={pendingEdge.a.y}
-              x2={pendingEdge.b.x}
-              y2={pendingEdge.b.y}
-              stroke="var(--game-accent)"
-              strokeWidth={6}
-              strokeLinecap="round"
-            />
+          {pendingRoute && (
+            <g fill="none" stroke="var(--game-accent)" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points={pendingRoute} strokeWidth={15} strokeOpacity={0.22} />
+              <polyline points={pendingRoute} strokeWidth={6} />
+            </g>
           )}
 
           {viewAs === "detective" && lastKnown != null && !vedhaVisible && (
