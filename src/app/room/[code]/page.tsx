@@ -1,6 +1,7 @@
 import { LobbyClient } from "@/components/lobby/lobby-client";
 
-export default async function LobbyPage({ params }: PageProps<"/room/[code]">) {
+export default async function LobbyPage({ params, searchParams }: PageProps<"/room/[code]">) {
   const { code } = await params;
-  return <LobbyClient code={code.toUpperCase()} />;
+  const sp = await searchParams;
+  return <LobbyClient code={code.toUpperCase()} solo={sp?.solo === "1"} />;
 }

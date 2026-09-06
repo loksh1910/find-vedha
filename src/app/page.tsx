@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 import { Logo } from "@/components/shell/logo";
 import { MagnifyMap } from "@/components/landing/magnify-map";
+import { GameModeDialog } from "@/components/landing/game-mode-dialog";
 import { AuthDialog } from "@/components/auth/auth-dialog";
 import { ManualDialog } from "@/components/manual/manual-dialog";
 import { Button } from "@/components/ui/button";
@@ -35,10 +36,11 @@ export default function LandingPage() {
   const router = useRouter();
   const { hydrated, isSignedIn } = useAppState();
   const [authOpen, setAuthOpen] = useState(false);
+  const [modeOpen, setModeOpen] = useState(false);
 
   const onPlay = () => {
     if (!hydrated) return;
-    if (isSignedIn) router.push("/dashboard");
+    if (isSignedIn) setModeOpen(true);
     else setAuthOpen(true);
   };
 
@@ -140,6 +142,7 @@ export default function LandingPage() {
           router.push("/dashboard");
         }}
       />
+      <GameModeDialog open={modeOpen} onOpenChange={setModeOpen} />
     </main>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 import { PanelRightClose, Video, VideoOff } from "lucide-react";
 import { TravelLog } from "./travel-log";
 import { PlayersPanel } from "./players-panel";
@@ -17,6 +18,20 @@ const TABS = [
 export function RightRail({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("log");
   const [videoOn, setVideoOn] = useState(true);
+
+  const params = useParams<{ code: string }>();
+  const code = (Array.isArray(params.code) ? params.code[0] : params.code ?? "").toUpperCase();
+  const [solo, setSolo] = useState(false);
+  useEffect(() => {
+    try {
+      /* eslint-disable-next-line react-hooks/set-state-in-effect -- one-time read of the solo flag */
+      setSolo(sessionStorage.getItem(`fv:solo:${code}`) === "1");
+    } catch {
+      /* keep default */
+    }
+  }, [code]);
+
+  const showVideo = !solo && videoOn;
 
   return (
     <aside className="flex w-[300px] shrink-0 flex-col border-l border-line bg-surface xl:w-[360px]">
@@ -42,21 +57,23 @@ export function RightRail({ onClose }: { onClose: () => void }) {
             {t.label}
           </button>
         ))}
-        <button
-          onClick={() => setVideoOn((v) => !v)}
-          aria-label={videoOn ? "Hide video" : "Show video"}
-          aria-pressed={videoOn}
-          title={videoOn ? "Hide video" : "Show video"}
-          className={cn(
-            "grid w-8 shrink-0 place-items-center border-l border-line hover:bg-surface-2",
-            videoOn ? "text-game-accent" : "text-faint hover:text-text",
-          )}
-        >
-          {videoOn ? <Video size={15} /> : <VideoOff size={15} />}
-        </button>
+        {!solo && (
+          <button
+            onClick={() => setVideoOn((v) => !v)}
+            aria-label={videoOn ? "Hide video" : "Show video"}
+            aria-pressed={videoOn}
+            title={videoOn ? "Hide video" : "Show video"}
+            className={cn(
+              "grid w-8 shrink-0 place-items-center border-l border-line hover:bg-surface-2",
+              videoOn ? "text-game-accent" : "text-faint hover:text-text",
+            )}
+          >
+            {videoOn ? <Video size={15} /> : <VideoOff size={15} />}
+          </button>
+        )}
       </div>
 
-      {videoOn && (
+      {showVideo && (
         <div className="min-h-[128px] max-h-[340px] shrink-0 grow-0 basis-[38%] overflow-hidden border-b border-line">
           <VideoGrid />
         </div>

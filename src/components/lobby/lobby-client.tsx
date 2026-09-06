@@ -51,11 +51,14 @@ type Player = {
 
 const SELECT_MS = 10_000;
 const COUNTDOWN_MS = 5_000;
+const SOLO_COUNTDOWN_MS = 10_000;
 const ME = "me";
+const CPU = "cpu";
 
-export function LobbyClient({ code }: { code: string }) {
+export function LobbyClient({ code, solo = false }: { code: string; solo?: boolean }) {
   const router = useRouter();
   const { hydrated, session, findRoom } = useAppState();
+  const cdMs = solo ? SOLO_COUNTDOWN_MS : COUNTDOWN_MS;
 
   const fallbackRoom = useMemo(
     () => ({
@@ -82,8 +85,9 @@ export function LobbyClient({ code }: { code: string }) {
       isHost: true,
       isMe: true,
     };
+    if (solo) return [me, { id: CPU, name: "Computer", avatarId: "tile-6" }];
     return [me, ...LOBBY_BOTS.map((b) => ({ id: b.id, name: b.name, avatarId: b.avatarId }))];
-  }, [session?.username, session?.avatarId]);
+  }, [session?.username, session?.avatarId, solo]);
 
   const [cap, setCap] = useState(() => Math.min(room.maxPlayers, 6));
   const players = useMemo(() => allPlayers.slice(0, cap), [allPlayers, cap]);
@@ -92,7 +96,7 @@ export function LobbyClient({ code }: { code: string }) {
     [players],
   );
 
-  const [phase, setPhase] = useState<Phase>("roster");
+  const [phase, setPhase] = useState<Phase>(solo ? "selecting" : "roster");
   const [claims, setClaims] = useState<Partial<Record<SlotId, string>>>({});
   const claimsRef = useRef(claims);
   useEffect(() => {
@@ -110,7 +114,7 @@ export function LobbyClient({ code }: { code: string }) {
 
   /* ---- selecting: 10s clock + scripted bot claims + seeded chat ---- */
   useEffect(() => {
-    if (phase !== "selecting") return;
+    if (phase !== "selecting" || solo) return;
     const ids = players.map((p) => p.id);
 
     const timers: ReturnType<typeof setTimeout>[] = [];
@@ -142,7 +146,7 @@ export function LobbyClient({ code }: { code: string }) {
       clearInterval(iv);
       timers.forEach(clearTimeout);
     };
-  }, [phase, players, deadline]);
+  }, [phase, players, deadline, solo]);
 
   /* ---- locked: brief "roles are set" beat ---- */
   useEffect(() => {
@@ -153,14 +157,14 @@ export function LobbyClient({ code }: { code: string }) {
 
   /* ---- ready: bots ready up on a stagger ---- */
   useEffect(() => {
-    if (phase !== "ready") return;
+    if (phase !== "ready" || solo) return;
     const timers = players
       .filter((p) => !p.isMe)
       .map((p, i) =>
         setTimeout(() => setReady((r) => new Set(r).add(p.id)), 800 + i * 600),
       );
     return () => timers.forEach(clearTimeout);
-  }, [phase, players]);
+  }, [phase, players, solo]);
 
   /* ---- everyone ready -> 5s countdown ----
      Deliberate synchronous phase advance: readiness is driven by external
@@ -188,10 +192,12 @@ export function LobbyClient({ code }: { code: string }) {
         ),
       }));
       sessionStorage.setItem(`fv:seats:${code}`, JSON.stringify(seats));
+      if (solo) sessionStorage.setItem(`fv:solo:${code}`, "1");
+      else sessionStorage.removeItem(`fv:solo:${code}`);
     } catch {
       /* sessionStorage unavailable — game falls back to a full table */
     }
-  }, [phase, players, claims, code]);
+  }, [phase, players, claims, code, solo]);
 
   /* ---- countdown: 5s, cancellable by un-readying ---- */
   useEffect(() => {
@@ -264,7 +270,7 @@ export function LobbyClient({ code }: { code: string }) {
   }
 
   function restart() {
-    setPhase("roster");
+    setPhase(solo ? "selecting" : "roster");
     setClaims({});
     setReady(new Set());
     setFeed([]);
@@ -272,8 +278,21 @@ export function LobbyClient({ code }: { code: string }) {
     setDeadline(0);
   }
 
+  /** solo: lock in your pick, give every other role to the computer, count down */
+  function startSolo() {
+    setClaims((prev) => {
+      const filled = { ...prev };
+      for (const s of ALL_SLOTS) if (!filled[s.id]) filled[s.id] = CPU;
+      return filled;
+    });
+    setNow(Date.now());
+    setDeadline(Date.now() + SOLO_COUNTDOWN_MS);
+    setPhase("countdown");
+  }
+
   const assignments = assignmentsFor(claims);
   const readyCount = players.filter((p) => ready.has(p.id)).length;
+  const myClaim = (Object.values(claims) as string[]).includes(ME);
   const showBoardInteractive = phase === "selecting";
   const showAssignments = phase === "locked" || phase === "ready" || phase === "countdown";
 
@@ -346,28 +365,31 @@ export function LobbyClient({ code }: { code: string }) {
       <div className="grid flex-1 gap-0 lg:grid-cols-[1fr_320px]">
         {/* centre */}
         <section className="flex min-w-0 flex-col p-4 md:p-8">
-          <LobbyVideo peers={players.filter((p) => !p.isMe)} />
+          {!solo && <LobbyVideo peers={players.filter((p) => !p.isMe)} />}
 
           {/* phase heading */}
           <div className="mb-6 flex items-center justify-between gap-4">
             <div>
               <p className="eyebrow">
-                {phase === "roster" && "Step 1 — roster"}
-                {phase === "selecting" && "Step 2 — claim a role"}
+                {solo ? "Solo — vs the computer" : phase === "roster" && "Step 1 — roster"}
+                {!solo && phase === "selecting" && "Step 2 — claim a role"}
                 {phase === "locked" && "Step 3 — roles set"}
-                {(phase === "ready" || phase === "countdown") && "Step 4 — ready up"}
+                {(phase === "ready" || phase === "countdown") &&
+                  (solo ? "Get set" : "Step 4 — ready up")}
                 {phase === "starting" && "Starting"}
               </p>
               <h1 className="mt-1 font-display text-xl font-extrabold tracking-tight text-text">
                 {phase === "roster" && "Waiting for the host to start"}
-                {phase === "selecting" && "Pick Vedha or a Detective"}
+                {phase === "selecting" &&
+                  (solo ? "Pick your side" : "Pick Vedha or a Detective")}
                 {phase === "locked" && "Here's who's who"}
                 {phase === "ready" && "Mark ready when you are"}
-                {phase === "countdown" && "Everyone's ready"}
+                {phase === "countdown" &&
+                  (solo ? "The computer takes the rest" : "Everyone's ready")}
                 {phase === "starting" && "…"}
               </h1>
             </div>
-            {phase === "selecting" && (
+            {phase === "selecting" && !solo && (
               <CountdownRing
                 progress={remaining / SELECT_MS}
                 value={Math.ceil(remaining / 1000)}
@@ -557,11 +579,24 @@ export function LobbyClient({ code }: { code: string }) {
           </div>
         )}
 
-        {phase === "selecting" && (
+        {phase === "selecting" && !solo && (
           <p className="text-center text-sm text-muted">
             Claim a role — or let the clock decide.{" "}
             <span className="text-faint">Anything unclaimed is dealt at random.</span>
           </p>
+        )}
+
+        {phase === "selecting" && solo && (
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-sm text-muted">
+              {myClaim
+                ? "Locked in — the computer plays every other role."
+                : "Tap Vedha or a Detective slot to choose your side."}
+            </span>
+            <Button variant="primary" disabled={!myClaim} onClick={startSolo}>
+              Ready — start game
+            </Button>
+          </div>
         )}
 
         {phase === "locked" && (
@@ -590,11 +625,11 @@ export function LobbyClient({ code }: { code: string }) {
             <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-line">
               <div
                 className="h-full rounded-full bg-signal"
-                style={{ width: `${(remaining / COUNTDOWN_MS) * 100}%`, transition: "width 100ms linear" }}
+                style={{ width: `${(remaining / cdMs) * 100}%`, transition: "width 100ms linear" }}
               />
             </div>
             <button
-              onClick={toggleMyReady}
+              onClick={() => (solo ? setPhase("selecting") : toggleMyReady())}
               className="shrink-0 text-xs text-faint hover:text-muted"
             >
               Cancel
@@ -604,7 +639,7 @@ export function LobbyClient({ code }: { code: string }) {
       </footer>
 
       {phase === "starting" && <TransitionOverlay code={code} />}
-      <CameraPrompt />
+      {!solo && <CameraPrompt />}
     </main>
   );
 }
