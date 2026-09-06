@@ -270,7 +270,7 @@ export function LobbyClient({ code, solo = false }: { code: string; solo?: boole
     return () => clearInterval(iv);
   }, [solo, phase, deadline]);
 
-  /* ---- hand the final roster to the game (one video tile per real player) ---- */
+  /* ---- lobby is done: stash the roster, and (host) create the game row ---- */
   useEffect(() => {
     if (phase !== "starting") return;
     try {
@@ -288,7 +288,14 @@ export function LobbyClient({ code, solo = false }: { code: string; solo?: boole
     } catch {
       /* sessionStorage unavailable — game falls back to a full table */
     }
-  }, [phase, players, claims, code, solo]);
+    if (!solo && isHost) {
+      void fetch("/api/game/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+    }
+  }, [phase, players, claims, code, solo, isHost]);
 
   const remaining = Math.max(
     0,

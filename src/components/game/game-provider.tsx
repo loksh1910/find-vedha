@@ -10,6 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useParams } from "next/navigation";
 import {
   applyMove,
   autoDetectiveMove,
@@ -21,6 +22,8 @@ import {
   type Move,
 } from "@/lib/game/engine";
 import type { GameState, MoveTransport, Role } from "@/lib/game/types";
+import { createClient } from "@/lib/supabase/client";
+import { myPawns, type GameSeat } from "@/lib/game/seats";
 
 type Pending = { to: number; options: Move[] } | null;
 
@@ -30,11 +33,11 @@ type GameCtx = {
   setViewAs: (r: Role) => void;
   autoDetectives: boolean;
   toggleAutoDetectives: () => void;
+  /** false for a networked game (each detective is a real player) */
+  soloTools: boolean;
 
   activePawnId: string;
-  /** viewer's side matches whose turn it is */
   myTurn: boolean;
-  /** legal destination node ids for the active pawn, when it's the viewer's move */
   legalDest: Set<number>;
   vedhaVisible: boolean;
   lastKnown: number | null;
@@ -52,22 +55,118 @@ type GameCtx = {
 
   revealFlash: { round: number; node: number } | null;
   newGame: () => void;
+  /** transient "not your turn" / network problems, networked play only */
+  moveError: string | null;
 };
 
 const Ctx = createContext<GameCtx | null>(null);
 
+const SOLO_SEED = 20260831;
+
 export function GameProvider({ children }: { children: ReactNode }) {
-  const [game, setGame] = useState<GameState>(() => createGame(20260831));
-  const [viewAs, setViewAs] = useState<Role>("vedha");
+  const params = useParams<{ code: string }>();
+  const code = (
+    Array.isArray(params.code) ? params.code[0] : (params.code ?? "")
+  ).toUpperCase();
+
+  const [solo] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return sessionStorage.getItem(`fv:solo:${code}`) === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  const supabase = useMemo(() => createClient(), []);
+
+  const [game, setGame] = useState<GameState>(() => createGame(SOLO_SEED));
+  const [seats, setSeats] = useState<GameSeat[]>([]);
+  const [uid, setUid] = useState<string | null>(null);
+  const [controlsVedha, setControlsVedha] = useState(true);
+  const [viewAs, setViewAsLocal] = useState<Role>("vedha");
   const [autoDetectives, setAutoDetectives] = useState(false);
   const [pending, setPending] = useState<Pending>(null);
   const [chosenTransport, setChosenTransport] = useState<MoveTransport | null>(null);
   const [revealFlash, setRevealFlash] = useState<GameCtx["revealFlash"]>(null);
+  const [moveError, setMoveError] = useState<string | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const errTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const flashOn = useCallback((next: GameState, prevRevealRound: number | null) => {
+    if (
+      next.lastRevealRound !== prevRevealRound &&
+      next.lastRevealRound != null
+    ) {
+      const revealed = [...next.log].reverse().find((e) => e.revealed);
+      if (revealed && revealed.node >= 1) {
+        setRevealFlash({ round: revealed.round, node: revealed.node });
+        if (flashTimer.current) clearTimeout(flashTimer.current);
+        flashTimer.current = setTimeout(() => setRevealFlash(null), 2400);
+      }
+    }
+  }, []);
+
+  /* ---------------- networked game: load + subscribe ---------------- */
+  const prevRevealRef = useRef<number | null>(null);
+  const fetchGame = useCallback(async () => {
+    const { data, error } = await supabase.rpc("get_game", { p_code: code });
+    if (error || !data) return false;
+    const payload = data as {
+      state: GameState;
+      seats: GameSeat[];
+      controlsVedha: boolean;
+    };
+    setSeats(payload.seats ?? []);
+    setControlsVedha(payload.controlsVedha);
+    setViewAsLocal(payload.controlsVedha ? "vedha" : "detective");
+    flashOn(payload.state, prevRevealRef.current);
+    prevRevealRef.current = payload.state.lastRevealRound;
+    setGame(payload.state);
+    return true;
+  }, [supabase, code, flashOn]);
+
+  useEffect(() => {
+    if (solo) return;
+    let alive = true;
+
+    supabase.auth.getUser().then(({ data }) => {
+      if (alive) setUid(data.user?.id ?? null);
+    });
+
+    // the row is created by the host as the lobby ends — retry briefly
+    let tries = 0;
+    const load = async () => {
+      const ok = await fetchGame();
+      if (!ok && alive && tries++ < 12) setTimeout(load, 700);
+    };
+    void load();
+
+    const chan = supabase
+      .channel(`room:${code}`)
+      .on("broadcast", { event: "game" }, () => void fetchGame())
+      .subscribe();
+
+    const onFocus = () => void fetchGame();
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      alive = false;
+      window.removeEventListener("focus", onFocus);
+      void supabase.removeChannel(chan);
+    };
+  }, [solo, supabase, code, fetchGame]);
+
+  const mine = useMemo(
+    () => (solo ? null : myPawns(seats, uid)),
+    [solo, seats, uid],
+  );
 
   const activePawnId = game.turn;
-  const turnSide: Role = activePawnId === "vedha" ? "vedha" : "detective";
-  const myTurn = game.status.kind === "playing" && turnSide === viewAs;
+  const myTurn = solo
+    ? game.status.kind === "playing" &&
+      (game.turn === "vedha" ? viewAs === "vedha" : viewAs === "detective")
+    : game.status.kind === "playing" && !!mine?.includes(game.turn);
 
   const legalDest = useMemo(() => {
     if (!myTurn) return new Set<number>();
@@ -75,33 +174,21 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }, [game, activePawnId, myTurn]);
 
   const vedhaVisible = useMemo(() => {
-    if (viewAs === "vedha") return true;
+    if (solo && viewAs === "vedha") return true;
+    if (!solo && controlsVedha) return true;
     if (game.status.kind === "over") return true;
     const last = game.log[game.log.length - 1];
     return !!last?.revealed;
-  }, [viewAs, game]);
+  }, [solo, viewAs, controlsVedha, game]);
 
   const lastKnown = useMemo(() => lastKnownVedhaNode(game), [game]);
-  const canDouble = useMemo(
-    () => viewAs === "vedha" && canDoubleMove(game),
-    [viewAs, game],
-  );
 
-  const applyAndFlash = useCallback((next: GameState, prev: GameState) => {
-    if (
-      next.lastRevealRound !== prev.lastRevealRound &&
-      next.lastRevealRound != null
-    ) {
-      const revealed = [...next.log].reverse().find((e) => e.revealed);
-      if (revealed) {
-        setRevealFlash({ round: revealed.round, node: revealed.node });
-        if (flashTimer.current) clearTimeout(flashTimer.current);
-        flashTimer.current = setTimeout(() => setRevealFlash(null), 2400);
-      }
-    }
-    setGame(next);
-  }, []);
+  const canDouble = useMemo(() => {
+    const asVedha = solo ? viewAs === "vedha" : controlsVedha;
+    return asVedha && canDoubleMove(game);
+  }, [solo, viewAs, controlsVedha, game]);
 
+  /* ------------------------- move flow ------------------------- */
   const pickNode = useCallback(
     (id: number) => {
       if (!myTurn) return;
@@ -120,45 +207,110 @@ export function GameProvider({ children }: { children: ReactNode }) {
     setChosenTransport(null);
   }, []);
 
+  const flash = useCallback(
+    (msg: string) => {
+      setMoveError(msg);
+      if (errTimer.current) clearTimeout(errTimer.current);
+      errTimer.current = setTimeout(() => setMoveError(null), 3000);
+    },
+    [],
+  );
+
   const confirm = useCallback(() => {
     if (!pending || !chosenTransport) return;
     const move = pending.options.find((m) => m.transport === chosenTransport);
     if (!move) return;
-    const next = applyMove(game, move);
+
+    if (solo) {
+      const prevReveal = game.lastRevealRound;
+      const next = applyMove(game, move);
+      cancel();
+      flashOn(next, prevReveal);
+      setGame(next);
+      return;
+    }
+
     cancel();
-    applyAndFlash(next, game);
-  }, [pending, chosenTransport, game, cancel, applyAndFlash]);
+    void fetch("/api/game/move", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        code,
+        move: { pawnId: move.pawnId, to: move.to, transport: move.transport, via: move.via },
+      }),
+    }).then(async (res) => {
+      if (res.ok) {
+        void fetchGame();
+      } else {
+        const { error } = await res.json().catch(() => ({ error: "failed" }));
+        flash(
+          error === "not-your-turn"
+            ? "It's not your turn."
+            : error === "illegal-move"
+              ? "That move isn't legal."
+              : "Couldn't send that move.",
+        );
+        void fetchGame();
+      }
+    });
+  }, [pending, chosenTransport, solo, game, code, cancel, flashOn, fetchGame, flash]);
 
   const startDouble = useCallback(() => {
     if (!canDouble) return;
-    setGame(declareDoubleMove(game));
-  }, [canDouble, game]);
+    if (solo) {
+      setGame(declareDoubleMove(game));
+      return;
+    }
+    void fetch("/api/game/double", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code }),
+    }).then((res) => {
+      if (res.ok) void fetchGame();
+      else flash("Couldn't start the Double-Move.");
+    });
+  }, [canDouble, solo, game, code, fetchGame, flash]);
 
   const newGame = useCallback(() => {
-    setGame(createGame(Date.now()));
-    cancel();
-    setRevealFlash(null);
-  }, [cancel]);
+    if (solo) {
+      setGame(createGame(Date.now()));
+      cancel();
+      setRevealFlash(null);
+      prevRevealRef.current = null;
+      return;
+    }
+    void fetch("/api/game/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code, force: true }),
+    }).then((res) => {
+      if (res.ok) void fetchGame();
+      else flash("Only the host can start a new game.");
+    });
+  }, [solo, code, cancel, fetchGame, flash]);
 
   const toggleAutoDetectives = useCallback(
     () => setAutoDetectives((v) => !v),
     [],
   );
+  const setViewAs = useCallback(
+    (r: Role) => {
+      if (solo) setViewAsLocal(r);
+    },
+    [solo],
+  );
 
-  // demo aid: auto-move detectives when it's their turn
+  // solo demo aid: auto-move detectives on their turn
   useEffect(() => {
-    if (!autoDetectives) return;
+    if (!solo || !autoDetectives) return;
     if (game.status.kind !== "playing") return;
     if (game.turn === "vedha") return;
     const t = setTimeout(() => {
       const m = autoDetectiveMove(game);
-      setGame((cur) => {
-        if (cur !== game) return cur; // stale
-        return m ? applyMove(cur, m) : cur;
-      });
+      setGame((cur) => (cur !== game ? cur : m ? applyMove(cur, m) : cur));
     }, 650);
     return () => clearTimeout(t);
-  }, [autoDetectives, game]);
+  }, [solo, autoDetectives, game]);
 
   const value: GameCtx = {
     game,
@@ -166,6 +318,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     setViewAs,
     autoDetectives,
     toggleAutoDetectives,
+    soloTools: solo,
     activePawnId,
     myTurn,
     legalDest,
@@ -182,6 +335,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     doubleActive: game.double.active,
     revealFlash,
     newGame,
+    moveError,
   };
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

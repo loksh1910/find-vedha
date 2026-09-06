@@ -835,7 +835,9 @@ function build(): Board {
 export const BOARD: Board = build();
 
 export function nodeById(id: number): BoardNode {
-  return BOARD.nodes[id - 1];
+  // id can be a redaction sentinel (-1) for a hidden Vedha; callers gate on
+  // visibility before rendering, this just keeps `.x`/`.y` reads from throwing.
+  return BOARD.nodes[id - 1] ?? BOARD.nodes[0];
 }
 
 let _nbr: Map<number, { to: number; mode: TransportMode }[]> | null = null;
