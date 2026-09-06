@@ -27,6 +27,8 @@ import { CountdownRing } from "@/components/ui/countdown-ring";
 import { ManualDialog } from "@/components/manual/manual-dialog";
 import { SlotCard } from "./slot-card";
 import { TransitionOverlay } from "./transition-overlay";
+import { LobbyVideo } from "./lobby-video";
+import { CameraPrompt } from "@/components/media/camera-prompt";
 import { useAppState } from "@/components/providers/app-state-provider";
 import {
   ALL_SLOTS,
@@ -414,8 +416,9 @@ export function LobbyClient({ code }: { code: string }) {
           )}
         </section>
 
-        {/* right rail: players + chat */}
+        {/* right rail: table video + players + chat */}
         <aside className="flex flex-col border-t border-line lg:border-l lg:border-t-0">
+          <LobbyVideo peers={players.filter((p) => !p.isMe)} />
           <div className="border-b border-line p-4">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="eyebrow">Players</h2>
@@ -564,6 +567,7 @@ export function LobbyClient({ code }: { code: string }) {
       </footer>
 
       {phase === "starting" && <TransitionOverlay code={code} />}
+      <CameraPrompt />
     </main>
   );
 }
