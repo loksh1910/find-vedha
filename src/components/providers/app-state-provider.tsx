@@ -319,11 +319,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
       const { error: joinErr } = await supabase
         .from("room_members")
-        .upsert(
-          { room_id: found.id, user_id: userId },
-          { onConflict: "room_id,user_id", ignoreDuplicates: true },
-        );
-      if (joinErr)
+        .insert({ room_id: found.id, user_id: userId });
+      // 23505 = already a member — that's fine, fall through
+      if (joinErr && joinErr.code !== "23505")
         return { ok: false, reason: "error", message: "Couldn't join. Try again." };
 
       const room = await findRoom(clean);
