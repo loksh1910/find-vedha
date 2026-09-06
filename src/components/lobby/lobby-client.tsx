@@ -343,11 +343,11 @@ export function LobbyClient({ code }: { code: string }) {
         </div>
       </header>
 
-      <LobbyVideo peers={players.filter((p) => !p.isMe)} />
-
       <div className="grid flex-1 gap-0 lg:grid-cols-[1fr_320px]">
         {/* centre */}
-        <section className="flex flex-col p-4 md:p-8">
+        <section className="flex min-w-0 flex-col p-4 md:p-8">
+          <LobbyVideo peers={players.filter((p) => !p.isMe)} />
+
           {/* phase heading */}
           <div className="mb-6 flex items-center justify-between gap-4">
             <div>

@@ -14,7 +14,7 @@ export function LobbyVideo({ peers }: { peers: Peer[] }) {
   const off = phase === "skipped" || phase === "error";
 
   return (
-    <div className="flex items-center gap-4 border-b border-line bg-surface px-4 py-3 md:px-6">
+    <div className="-mx-4 -mt-4 mb-6 flex shrink-0 items-center gap-4 border-b border-line bg-surface px-4 py-3 md:-mx-8 md:-mt-8 md:px-6">
       <div className="shrink-0">
         <span className="eyebrow block">Table</span>
         <span className="font-mono text-[0.625rem] text-faint">
