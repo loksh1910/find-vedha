@@ -231,21 +231,25 @@ body {
   }
 }
 
-/* landing hero: on desktop it starts centred and glides to the left column
-   (making room for the card ring) once, on load. `both` holds the end state
-   so reduced-motion users simply get the left-aligned result with no move. */
+/* landing hero: on desktop it slides in once, from the centred position to
+   the left column (making room for the card ring). Transform + opacity only,
+   so it stays on the compositor and never thrashes layout. `both` holds the
+   end state, so reduced-motion users just get the settled result, no move. */
 @keyframes fv-hero-settle {
   from {
-    margin-left: calc(50% - 280px);
+    opacity: 0;
+    transform: translate3d(min(260px, calc(50vw - 300px)), 0, 0);
   }
   to {
-    margin-left: 0;
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
   }
 }
 
 @media (min-width: 1024px) {
   .hero-settle {
-    animation: fv-hero-settle 720ms cubic-bezier(0.2, 0.6, 0.2, 1) both;
+    animation: fv-hero-settle 640ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    will-change: transform, opacity;
   }
 }
 
