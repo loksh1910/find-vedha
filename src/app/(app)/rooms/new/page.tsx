@@ -6,7 +6,7 @@ import { ArrowRight, ArrowLeft, Check, Copy, Minus, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Blade } from "@/components/ui/blade";
-import { useAppState, type MockRoom } from "@/components/providers/app-state-provider";
+import { useAppState, type Room } from "@/components/providers/app-state-provider";
 
 export default function CreateRoomPage() {
   const router = useRouter();
@@ -14,11 +14,21 @@ export default function CreateRoomPage() {
 
   const [name, setName] = useState("");
   const [maxPlayers, setMaxPlayers] = useState(6);
-  const [room, setRoom] = useState<MockRoom | null>(null);
+  const [room, setRoom] = useState<Room | null>(null);
   const [copied, setCopied] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  function create() {
-    setRoom(createRoom(name, maxPlayers));
+  async function create() {
+    setErr(null);
+    setBusy(true);
+    const res = await createRoom(name, maxPlayers);
+    setBusy(false);
+    if (res.error || !res.room) {
+      setErr(res.error ?? "Couldn't create the room.");
+      return;
+    }
+    setRoom(res.room);
   }
 
   function copy() {
@@ -103,8 +113,15 @@ export default function CreateRoomPage() {
             </p>
           </div>
 
-          <Button variant="primary" className="mt-5 w-full" onClick={create}>
-            Create room
+          {err && <p className="mt-4 text-xs text-danger">{err}</p>}
+
+          <Button
+            variant="primary"
+            className="mt-5 w-full"
+            onClick={create}
+            disabled={busy}
+          >
+            {busy ? "Creating room…" : "Create room"}
             <ArrowRight size={16} />
           </Button>
         </>

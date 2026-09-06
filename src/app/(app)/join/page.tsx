@@ -9,22 +9,21 @@ import { useAppState } from "@/components/providers/app-state-provider";
 
 export default function JoinPage() {
   const router = useRouter();
-  const { findRoom } = useAppState();
+  const { joinRoom } = useAppState();
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  function tryJoin(value: string) {
-    const clean = value.trim().toUpperCase();
-    if (clean.length < 6) {
-      setError("A code is six characters.");
+  async function tryJoin(value: string) {
+    setError(null);
+    setBusy(true);
+    const res = await joinRoom(value);
+    setBusy(false);
+    if (!res.ok) {
+      setError(res.message);
       return;
     }
-    const room = findRoom(clean);
-    if (!room) {
-      setError("That code doesn't match a room. Check it with your host.");
-      return;
-    }
-    router.push(`/room/${room.code}`);
+    router.push(`/room/${res.room.code}`);
   }
 
   return (
@@ -54,15 +53,15 @@ export default function JoinPage() {
             invalid={!!error}
           />
           <p className={error ? "mt-3 text-xs text-danger" : "mt-3 text-xs text-faint"}>
-            {error ?? "Demo code: VEDHA7"}
+            {error ?? "Ask your host for the six-character code."}
           </p>
           <Button
             variant="primary"
             className="mt-4 w-full"
-            disabled={code.length < 6}
+            disabled={code.length < 6 || busy}
             onClick={() => tryJoin(code)}
           >
-            Join lobby
+            {busy ? "Joining…" : "Join lobby"}
             <ArrowRight size={16} />
           </Button>
         </div>

@@ -62,19 +62,16 @@ export function LobbyClient({ code, solo = false }: { code: string; solo?: boole
 
   const fallbackRoom = useMemo(
     () => ({
+      id: "",
       code,
       name: `Room ${code}`,
       maxPlayers: 6,
+      hostId: "",
       hostName: session?.username ?? "You",
+      status: "roster",
       createdAt: 0,
     }),
     [code, session?.username],
-  );
-  // Resolve the real room only after hydration — findRoom reads localStorage,
-  // which isn't available during SSR / first client render.
-  const room = useMemo(
-    () => (hydrated ? (findRoom(code) ?? fallbackRoom) : fallbackRoom),
-    [hydrated, findRoom, code, fallbackRoom],
   );
 
   const allPlayers = useMemo<Player[]>(() => {
@@ -89,7 +86,24 @@ export function LobbyClient({ code, solo = false }: { code: string; solo?: boole
     return [me, ...LOBBY_BOTS.map((b) => ({ id: b.id, name: b.name, avatarId: b.avatarId }))];
   }, [session?.username, session?.avatarId, solo]);
 
-  const [cap, setCap] = useState(() => Math.min(room.maxPlayers, 6));
+  const [cap, setCap] = useState(6);
+
+  // The real room row loads once, after auth hydration. Until then the
+  // fallback keeps the lobby rendering exactly as it did on mock state.
+  const [room, setRoom] = useState(fallbackRoom);
+  useEffect(() => {
+    if (!hydrated) return;
+    let ok = true;
+    findRoom(code).then((r) => {
+      if (!ok || !r) return;
+      setRoom(r);
+      setCap(Math.min(r.maxPlayers, 6));
+    });
+    return () => {
+      ok = false;
+    };
+  }, [hydrated, findRoom, code]);
+
   const players = useMemo(() => allPlayers.slice(0, cap), [allPlayers, cap]);
   const playerById = useCallback(
     (id?: string) => players.find((p) => p.id === id),

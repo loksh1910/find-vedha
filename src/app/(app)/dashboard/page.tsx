@@ -17,17 +17,21 @@ import { cn } from "@/lib/cn";
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { session, findRoom } = useAppState();
+  const { session, joinRoom } = useAppState();
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  function tryJoin(value: string) {
-    const room = findRoom(value);
-    if (!room) {
-      setError("No room matches that code.");
+  async function tryJoin(value: string) {
+    setError(null);
+    setBusy(true);
+    const res = await joinRoom(value);
+    setBusy(false);
+    if (!res.ok) {
+      setError(res.message);
       return;
     }
-    router.push(`/room/${room.code}`);
+    router.push(`/room/${res.room.code}`);
   }
 
   return (
@@ -77,15 +81,15 @@ export default function DashboardPage() {
             />
             <div className="mt-2 flex items-center justify-between">
               <span className={cn("text-xs", error ? "text-danger" : "text-faint")}>
-                {error ?? "Try VEDHA7 for a demo lobby."}
+                {error ?? "Six characters from a friend's invite."}
               </span>
               <Button
                 size="sm"
                 variant="ghost"
-                disabled={code.length < 6}
+                disabled={code.length < 6 || busy}
                 onClick={() => tryJoin(code)}
               >
-                Join <ArrowRight size={14} />
+                {busy ? "Joining…" : "Join"} <ArrowRight size={14} />
               </Button>
             </div>
           </div>

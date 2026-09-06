@@ -12,12 +12,12 @@ import {
 import { createClient } from "@/lib/supabase/client";
 
 /* ------------------------------------------------------------------ *
- *  App state — real Supabase auth (Phase 2), rooms still mock.
+ *  App state — real Supabase auth + rooms (Phase 2).
  *
  *  `session` keeps its Phase-1 shape ({ username, avatarId }) so every
  *  screen that reads `session?.username` keeps working unchanged; it's
- *  now sourced from the `profiles` table instead of localStorage.
- *  Room create / join are still localStorage until the next step.
+ *  now sourced from the `profiles` table. Rooms are real DB rows; the
+ *  in-lobby claim/ready machine is still local until the next step.
  * ------------------------------------------------------------------ */
 
 export type Session = {
@@ -25,26 +25,26 @@ export type Session = {
   avatarId: string;
 };
 
-export type MockRoom = {
+export type Room = {
+  id: string;
   code: string;
   name: string;
   maxPlayers: number;
+  hostId: string;
   hostName: string;
+  status: string;
   createdAt: number;
 };
 
 type AuthResult = { error: string | null };
-
-const ROOMS_KEY = "fv.rooms";
-
-/** Always-valid demo code so Join can be tried without creating a room first. */
-export const DEMO_ROOM: MockRoom = {
-  code: "VEDHA7",
-  name: "Sunday night chase",
-  maxPlayers: 6,
-  hostName: "Karthik",
-  createdAt: 0,
-};
+type CreateResult = { room: Room | null; error: string | null };
+type JoinResult =
+  | { ok: true; room: Room }
+  | {
+      ok: false;
+      reason: "invalid" | "not-found" | "full" | "started" | "error";
+      message: string;
+    };
 
 type AppState = {
   hydrated: boolean;
@@ -63,8 +63,11 @@ type AppState = {
   signOut: () => Promise<void>;
   /** true when the username is free (and long enough) */
   checkUsername: (username: string) => Promise<boolean>;
-  createRoom: (name: string, maxPlayers: number) => MockRoom;
-  findRoom: (code: string) => MockRoom | null;
+  createRoom: (name: string, maxPlayers: number) => Promise<CreateResult>;
+  /** join by code — adds the caller to the room; carries the failure reason */
+  joinRoom: (code: string) => Promise<JoinResult>;
+  /** read a room the caller already belongs to (lobby display) */
+  findRoom: (code: string) => Promise<Room | null>;
 };
 
 const Ctx = createContext<AppState | null>(null);
@@ -81,14 +84,27 @@ function friendlyAuthError(message: string): string {
   return message;
 }
 
-function readRooms(): MockRoom[] {
-  try {
-    const raw = localStorage.getItem(ROOMS_KEY);
-    const list = raw ? (JSON.parse(raw) as MockRoom[]) : [];
-    return Array.isArray(list) ? list : [];
-  } catch {
-    return [];
-  }
+type RoomRow = {
+  id: string;
+  code: string;
+  name: string;
+  max_players: number;
+  host_id: string;
+  status: string;
+  created_at: string;
+};
+
+function toRoom(r: RoomRow, hostName: string): Room {
+  return {
+    id: r.id,
+    code: r.code,
+    name: r.name,
+    maxPlayers: r.max_players,
+    hostId: r.host_id,
+    hostName,
+    status: r.status,
+    createdAt: new Date(r.created_at).getTime(),
+  };
 }
 
 function makeCode(): string {
@@ -221,33 +237,102 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
   }, [supabase]);
 
-  const createRoom = useCallback(
-    (name: string, maxPlayers: number): MockRoom => {
-      const room: MockRoom = {
-        code: makeCode(),
-        name: name.trim() || `${profile?.username ?? "New"}'s room`,
-        maxPlayers,
-        hostName: profile?.username ?? "You",
-        createdAt: Date.now(),
-      };
-      try {
-        const list = readRooms();
-        list.push(room);
-        localStorage.setItem(ROOMS_KEY, JSON.stringify(list.slice(-20)));
-      } catch {
-        /* ignore */
-      }
-      return room;
+  const findRoom = useCallback(
+    async (code: string): Promise<Room | null> => {
+      const clean = code.trim().toUpperCase();
+      if (!clean) return null;
+      const { data, error } = await supabase
+        .from("rooms")
+        .select("*")
+        .eq("code", clean)
+        .maybeSingle();
+      if (error || !data) return null;
+      const { data: host } = await supabase
+        .from("profiles")
+        .select("username")
+        .eq("id", (data as RoomRow).host_id)
+        .maybeSingle();
+      return toRoom(data as RoomRow, host?.username ?? "Host");
     },
-    [profile],
+    [supabase],
   );
 
-  const findRoom = useCallback((code: string): MockRoom | null => {
-    const clean = code.trim().toUpperCase();
-    if (!clean) return null;
-    if (clean === DEMO_ROOM.code) return DEMO_ROOM;
-    return readRooms().find((r) => r.code === clean) ?? null;
-  }, []);
+  const createRoom = useCallback(
+    async (name: string, maxPlayers: number): Promise<CreateResult> => {
+      if (!userId) return { room: null, error: "Sign in to make a room." };
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const { data, error } = await supabase
+          .from("rooms")
+          .insert({
+            code: makeCode(),
+            name: name.trim() || `${profile?.username ?? "New"}'s room`,
+            host_id: userId,
+            max_players: maxPlayers,
+          })
+          .select("*")
+          .single();
+        if (error) {
+          if (error.code === "23505") continue; // code collision — try another
+          return { room: null, error: "Couldn't create the room. Try again." };
+        }
+        await supabase
+          .from("room_members")
+          .insert({ room_id: (data as RoomRow).id, user_id: userId });
+        return {
+          room: toRoom(data as RoomRow, profile?.username ?? "You"),
+          error: null,
+        };
+      }
+      return { room: null, error: "Couldn't get a free code. Try again." };
+    },
+    [supabase, userId, profile],
+  );
+
+  const joinRoom = useCallback(
+    async (code: string): Promise<JoinResult> => {
+      if (!userId)
+        return { ok: false, reason: "error", message: "Sign in to join a room." };
+      const clean = code.trim().toUpperCase();
+      if (clean.length < 6)
+        return { ok: false, reason: "invalid", message: "A code is six characters." };
+
+      const { data: rows, error } = await supabase.rpc("room_by_code", {
+        p_code: clean,
+      });
+      if (error)
+        return { ok: false, reason: "error", message: "Couldn't reach the server." };
+      const found = (rows as { id: string; status: string; max_players: number; member_count: number }[] | null)?.[0];
+      if (!found)
+        return {
+          ok: false,
+          reason: "not-found",
+          message: "That code doesn't match a room. Check it with your host.",
+        };
+      if (found.status !== "roster" && found.status !== "selecting")
+        return {
+          ok: false,
+          reason: "started",
+          message: "That game has already started.",
+        };
+      if (Number(found.member_count) >= found.max_players)
+        return { ok: false, reason: "full", message: "That room is full." };
+
+      const { error: joinErr } = await supabase
+        .from("room_members")
+        .upsert(
+          { room_id: found.id, user_id: userId },
+          { onConflict: "room_id,user_id", ignoreDuplicates: true },
+        );
+      if (joinErr)
+        return { ok: false, reason: "error", message: "Couldn't join. Try again." };
+
+      const room = await findRoom(clean);
+      if (!room)
+        return { ok: false, reason: "error", message: "Couldn't load the room." };
+      return { ok: true, room };
+    },
+    [supabase, userId, findRoom],
+  );
 
   const value = useMemo<AppState>(
     () => ({
@@ -262,6 +347,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       signOut,
       checkUsername,
       createRoom,
+      joinRoom,
       findRoom,
     }),
     [
@@ -275,6 +361,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       signOut,
       checkUsername,
       createRoom,
+      joinRoom,
       findRoom,
     ],
   );

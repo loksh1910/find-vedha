@@ -131,9 +131,13 @@ create policy "update own profile"
   using (id = auth.uid()) with check (id = auth.uid());
 
 -- rooms ---------------------------------------------------------
+-- Host is included explicitly: `insert ... returning` re-reads the new row,
+-- and the host's membership row is written in a separate statement just after,
+-- so at insert time only `host_id = auth.uid()` can match.
 drop policy if exists "members read their room" on public.rooms;
 create policy "members read their room"
-  on public.rooms for select to authenticated using (public.is_room_member(id));
+  on public.rooms for select to authenticated
+  using (public.is_room_member(id) or host_id = auth.uid());
 
 drop policy if exists "host creates room" on public.rooms;
 create policy "host creates room"
