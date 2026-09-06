@@ -166,6 +166,11 @@ export function MagnifyMap() {
             willChange: "transform",
           }}
         >
+          {/* live-search ping — a blue ring pulsing out once a second */}
+          <span
+            className="absolute inset-0 rounded-full border-2"
+            style={{ borderColor: "rgba(69,207,224,0.9)", animation: "fv-ping 1s linear infinite" }}
+          />
           <div
             className="relative overflow-hidden rounded-full"
             style={{
@@ -185,20 +190,6 @@ export function MagnifyMap() {
               <MapArt lens />
             </svg>
           </div>
-          {/* handle — pokes out from the lower-right of the lens */}
-          <span
-            className="absolute rounded-full"
-            style={{
-              width: 13,
-              height: 74,
-              left: R + R * 0.62,
-              top: R + R * 0.62,
-              transformOrigin: "top left",
-              transform: "rotate(45deg)",
-              background: "linear-gradient(var(--signal-hover), var(--signal))",
-              boxShadow: "0 6px 18px rgba(0,0,0,0.55)",
-            }}
-          />
         </div>
       )}
     </>

@@ -10,6 +10,7 @@ import { GameModeDialog } from "@/components/landing/game-mode-dialog";
 import { AuthDialog } from "@/components/auth/auth-dialog";
 import { ManualDialog } from "@/components/manual/manual-dialog";
 import { Button } from "@/components/ui/button";
+import { Avatar } from "@/components/ui/avatar";
 import { useAppState } from "@/components/providers/app-state-provider";
 
 const STEPS = [
@@ -34,7 +35,7 @@ const REVEALS = [3, 8, 13, 18, 24];
 
 export default function LandingPage() {
   const router = useRouter();
-  const { hydrated, isSignedIn } = useAppState();
+  const { hydrated, isSignedIn, session, signOut } = useAppState();
   const [authOpen, setAuthOpen] = useState(false);
   const [modeOpen, setModeOpen] = useState(false);
 
@@ -56,9 +57,19 @@ export default function LandingPage() {
           <nav className="flex items-center gap-1">
             <ManualDialog />
             {hydrated && isSignedIn ? (
-              <Link href="/dashboard">
-                <Button size="sm">Go to dashboard</Button>
-              </Link>
+              <>
+                <Link href="/dashboard">
+                  <Button size="sm">Go to dashboard</Button>
+                </Link>
+                <button
+                  onClick={signOut}
+                  title="Sign out"
+                  aria-label="Sign out"
+                  className="ml-1 rounded-full ring-1 ring-line-strong transition hover:ring-signal"
+                >
+                  <Avatar name={session?.username ?? "You"} avatarId={session?.avatarId} size={32} />
+                </button>
+              </>
             ) : (
               <Button size="sm" onClick={() => setAuthOpen(true)}>
                 Sign in
@@ -67,7 +78,7 @@ export default function LandingPage() {
           </nav>
         </header>
 
-        <section className="flex flex-1 flex-col justify-center py-16">
+        <section className="flex flex-1 flex-col items-center justify-center py-16 text-center">
           <p className="eyebrow">A hidden-chase game on the Chennai transit map</p>
           <h1 className="mt-4 font-display text-7xl font-extrabold leading-[0.95] tracking-tight text-text sm:text-8xl">
             Find Vedha
@@ -85,7 +96,7 @@ export default function LandingPage() {
           </div>
 
           {/* transit-line strip: the reveal schedule */}
-          <div className="mt-14 max-w-[520px]">
+          <div className="mt-14 w-full max-w-[520px]">
             <div className="mb-2 flex items-center justify-between">
               <span className="eyebrow">Vedha surfaces on</span>
               <span className="font-mono text-xs text-faint">round 1 → 24</span>
