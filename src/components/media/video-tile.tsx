@@ -12,19 +12,49 @@ type Common = {
   className?: string;
 };
 
-/** A peer's tile — avatar + static device state (mock, no real feed). */
+/** A peer's tile — live feed if they're on the call, avatar otherwise. */
 export function PeerTile({
   name,
   colorVar,
   speaking,
   micOn = true,
+  camOn = false,
+  stream = null,
   className,
-}: Common & { micOn?: boolean }) {
+}: Common & {
+  micOn?: boolean;
+  camOn?: boolean;
+  stream?: MediaStream | null;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    el.srcObject = stream ?? null;
+    if (stream) el.play().catch(() => {});
+  }, [stream]);
+
   return (
     <Frame colorVar={colorVar} speaking={speaking} className={className}>
-      <Avatar name={name} size={26} />
-      <span className="mt-1 text-[0.625rem] text-muted">{name}</span>
-      <Badges micOn={micOn} camOn={false} muted />
+      {stream && (
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          className={cn(
+            "absolute inset-0 h-full w-full object-cover",
+            camOn ? "opacity-100" : "opacity-0",
+          )}
+        />
+      )}
+      {!camOn && (
+        <>
+          <Avatar name={name} size={26} />
+          <span className="mt-1 text-[0.625rem] text-muted">{name}</span>
+        </>
+      )}
+      <Badges micOn={micOn} camOn={camOn} muted={!stream} />
     </Frame>
   );
 }

@@ -9,8 +9,21 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useParams } from "next/navigation";
+import type { DailyCall, DailyParticipant } from "@daily-co/daily-js";
 
 type Phase = "choosing" | "acquiring" | "live" | "skipped" | "error";
+
+export type RemotePeer = {
+  /** the Supabase user id carried in the meeting token */
+  id: string;
+  sessionId: string;
+  name: string;
+  stream: MediaStream | null; // audio + video
+  camOn: boolean;
+  micOn: boolean;
+  speaking: boolean;
+};
 
 type MediaCtx = {
   stream: MediaStream | null;
@@ -20,7 +33,9 @@ type MediaCtx = {
   /** true once the viewer has answered the camera/mic prompt (or skipped) */
   answered: boolean;
   error: string | null;
-  /** answer the prompt: acquire whichever devices were asked for */
+  /** the other people connected to the room's call */
+  peers: RemotePeer[];
+  /** answer the prompt: join the call with whichever devices were asked for */
   choose: (opts: { cam: boolean; mic: boolean }) => Promise<void>;
   skip: () => void;
   toggleCam: () => void;
@@ -29,119 +44,156 @@ type MediaCtx = {
 
 const Ctx = createContext<MediaCtx | null>(null);
 
+function trackOf(
+  p: DailyParticipant | undefined,
+  kind: "video" | "audio",
+): MediaStreamTrack | null {
+  const t = p?.tracks?.[kind];
+  return t?.state === "playable" && t.persistentTrack ? t.persistentTrack : null;
+}
+
 export function MediaProvider({ children }: { children: ReactNode }) {
+  const params = useParams<{ code: string }>();
+  const code = (
+    Array.isArray(params.code) ? params.code[0] : (params.code ?? "")
+  ).toUpperCase();
+
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [camOn, setCamOn] = useState(false);
   const [micOn, setMicOn] = useState(false);
   const [phase, setPhase] = useState<Phase>("choosing");
   const [error, setError] = useState<string | null>(null);
+  const [peers, setPeers] = useState<RemotePeer[]>([]);
 
-  // canonical live tracks; `stream` is a fresh wrapper handed to consumers so
-  // a <video> re-attaches whenever the track set changes
-  const tracksRef = useRef<{ video?: MediaStreamTrack; audio?: MediaStreamTrack }>({});
+  const callRef = useRef<DailyCall | null>(null);
 
-  const publish = useCallback(() => {
-    const { video, audio } = tracksRef.current;
-    const list = [video, audio].filter(Boolean) as MediaStreamTrack[];
-    setStream(list.length ? new MediaStream(list) : null);
+  const sync = useCallback(() => {
+    const call = callRef.current;
+    if (!call) return;
+    const all = call.participants();
+    const local = all.local;
+
+    setCamOn(!!local?.video);
+    setMicOn(!!local?.audio);
+    const lv = trackOf(local, "video");
+    setStream(lv ? new MediaStream([lv]) : null);
+
+    setPeers(
+      Object.values(all)
+        .filter((p) => !p.local)
+        .map((p) => {
+          const v = trackOf(p, "video");
+          const a = trackOf(p, "audio");
+          const tracks = [v, a].filter(Boolean) as MediaStreamTrack[];
+          return {
+            id: p.user_id || p.session_id,
+            sessionId: p.session_id,
+            name: p.user_name || "Player",
+            stream: tracks.length ? new MediaStream(tracks) : null,
+            camOn: !!p.video,
+            micOn: !!p.audio,
+            speaking: false,
+          };
+        }),
+    );
   }, []);
 
-  const stopAll = useCallback(() => {
-    const { video, audio } = tracksRef.current;
-    video?.stop();
-    audio?.stop();
-    tracksRef.current = {};
-  }, []);
-
-  // stop the camera/mic when leaving the room entirely
-  useEffect(() => () => stopAll(), [stopAll]);
-
-  const acquire = useCallback(
-    async (want: { video: boolean; audio: boolean }) => {
-      const gum = navigator.mediaDevices?.getUserMedia;
-      if (!gum) throw new Error("This browser has no camera/microphone access.");
-      const s = await navigator.mediaDevices.getUserMedia({
-        video: want.video ? { width: 960, height: 720 } : false,
-        audio: want.audio,
+  const ensureCall = useCallback(async (): Promise<DailyCall> => {
+    if (callRef.current) return callRef.current;
+    const Daily = (await import("@daily-co/daily-js")).default;
+    const existing = Daily.getCallInstance?.();
+    const call =
+      existing ?? Daily.createCallObject({ subscribeToTracksAutomatically: true });
+    call
+      .on("joined-meeting", sync)
+      .on("participant-joined", sync)
+      .on("participant-updated", sync)
+      .on("participant-left", sync)
+      .on("track-started", sync)
+      .on("track-stopped", sync)
+      .on("active-speaker-change", (ev) => {
+        const sid = ev?.activeSpeaker?.peerId;
+        setPeers((ps) => ps.map((p) => ({ ...p, speaking: p.sessionId === sid })));
       });
-      const v = s.getVideoTracks()[0];
-      const a = s.getAudioTracks()[0];
-      if (v) {
-        tracksRef.current.video?.stop();
-        tracksRef.current.video = v;
+    callRef.current = call;
+    return call;
+  }, [sync]);
+
+  const choose = useCallback(
+    async ({ cam, mic }: { cam: boolean; mic: boolean }) => {
+      if (!cam && !mic) {
+        setPhase("skipped");
+        setError(null);
+        return;
       }
-      if (a) {
-        tracksRef.current.audio?.stop();
-        tracksRef.current.audio = a;
+      setPhase("acquiring");
+      setError(null);
+      try {
+        const res = await fetch("/api/daily/room", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code }),
+        });
+        if (!res.ok) throw new Error("The call server didn't respond.");
+        const { url, token } = (await res.json()) as { url: string; token: string };
+
+        const call = await ensureCall();
+        if (call.meetingState() === "new" || call.meetingState() === "left-meeting") {
+          await call.join({ url, token, startVideoOff: !cam, startAudioOff: !mic });
+        } else {
+          await call.setLocalVideo(cam);
+          await call.setLocalAudio(mic);
+        }
+        setPhase("live");
+        sync();
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Could not connect to the call.",
+        );
+        setPhase("error");
       }
     },
-    [],
+    [code, ensureCall, sync],
   );
 
   const skip = useCallback(() => {
-    stopAll();
+    void callRef.current?.leave();
     setStream(null);
+    setPeers([]);
     setCamOn(false);
     setMicOn(false);
     setError(null);
     setPhase("skipped");
-  }, [stopAll]);
-
-  const choose = useCallback(
-    async ({ cam, mic }: { cam: boolean; mic: boolean }) => {
-      if (!cam && !mic) return skip();
-      setPhase("acquiring");
-      setError(null);
-      try {
-        await acquire({ video: cam, audio: mic });
-        setCamOn(!!tracksRef.current.video);
-        setMicOn(!!tracksRef.current.audio);
-        publish();
-        setPhase("live");
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Could not reach your devices.");
-        setPhase("error");
-      }
-    },
-    [acquire, publish, skip],
-  );
+  }, []);
 
   const toggleCam = useCallback(() => {
-    const t = tracksRef.current.video;
-    if (t) {
-      t.enabled = !camOn;
-      setCamOn(!camOn);
+    const call = callRef.current;
+    if (!call) {
+      void choose({ cam: true, mic: micOn });
       return;
     }
-    // no camera track yet (e.g. joined mic-only) — acquire one now
-    void acquire({ video: true, audio: false })
-      .then(() => {
-        setCamOn(true);
-        if (phase !== "live") setPhase("live");
-        publish();
-      })
-      .catch((err) =>
-        setError(err instanceof Error ? err.message : "Could not start the camera."),
-      );
-  }, [acquire, camOn, phase, publish]);
+    void call.setLocalVideo(!camOn);
+    setCamOn(!camOn);
+  }, [choose, camOn, micOn]);
 
   const toggleMic = useCallback(() => {
-    const t = tracksRef.current.audio;
-    if (t) {
-      t.enabled = !micOn;
-      setMicOn(!micOn);
+    const call = callRef.current;
+    if (!call) {
+      void choose({ cam: camOn, mic: true });
       return;
     }
-    void acquire({ video: false, audio: true })
-      .then(() => {
-        setMicOn(true);
-        if (phase !== "live") setPhase("live");
-        publish();
-      })
-      .catch((err) =>
-        setError(err instanceof Error ? err.message : "Could not start the microphone."),
-      );
-  }, [acquire, micOn, phase, publish]);
+    void call.setLocalAudio(!micOn);
+    setMicOn(!micOn);
+  }, [choose, camOn, micOn]);
+
+  // tear the call down when leaving the room entirely
+  useEffect(() => {
+    return () => {
+      const call = callRef.current;
+      callRef.current = null;
+      void call?.destroy();
+    };
+  }, []);
 
   const value: MediaCtx = {
     stream,
@@ -150,6 +202,7 @@ export function MediaProvider({ children }: { children: ReactNode }) {
     phase,
     answered: phase !== "choosing",
     error,
+    peers,
     choose,
     skip,
     toggleCam,

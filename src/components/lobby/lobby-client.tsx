@@ -275,6 +275,7 @@ export function LobbyClient({ code, solo = false }: { code: string; solo?: boole
     if (phase !== "starting") return;
     try {
       const seats = players.map((p) => ({
+        id: p.id,
         name: p.name,
         isMe: !!p.isMe,
         pawns: ALL_SLOTS.filter((s) => claims[s.id] === p.id).map((s) =>

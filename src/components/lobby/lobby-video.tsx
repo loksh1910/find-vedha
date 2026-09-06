@@ -10,8 +10,18 @@ const TILE = "w-[128px] shrink-0";
 
 /** Horizontal table strip under the lobby header — your live tile + the table. */
 export function LobbyVideo({ peers }: { peers: Peer[] }) {
-  const { stream, camOn, micOn, phase, toggleCam, toggleMic, choose } = useMedia();
+  const {
+    stream,
+    camOn,
+    micOn,
+    phase,
+    toggleCam,
+    toggleMic,
+    choose,
+    peers: onCall,
+  } = useMedia();
   const off = phase === "skipped" || phase === "error";
+  const callOf = (id: string) => onCall.find((p) => p.id === id);
 
   return (
     <div className="-mx-4 -mt-4 mb-6 flex shrink-0 items-center gap-4 border-b border-line bg-surface px-4 py-3 md:-mx-8 md:-mt-8 md:px-6">
@@ -41,9 +51,20 @@ export function LobbyVideo({ peers }: { peers: Peer[] }) {
             onToggleCam={toggleCam}
             onToggleMic={toggleMic}
           />
-          {peers.map((p) => (
-            <PeerTile key={p.id} className={TILE} name={p.name} />
-          ))}
+          {peers.map((p) => {
+            const c = callOf(p.id);
+            return (
+              <PeerTile
+                key={p.id}
+                className={TILE}
+                name={p.name}
+                stream={c?.stream ?? null}
+                camOn={c?.camOn ?? false}
+                micOn={c?.micOn ?? true}
+                speaking={c?.speaking}
+              />
+            );
+          })}
         </div>
       )}
     </div>

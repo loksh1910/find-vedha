@@ -6,7 +6,7 @@ import { useMedia } from "@/components/providers/media-provider";
 import { SelfTile, PeerTile } from "@/components/media/video-tile";
 import { useGame } from "./game-provider";
 
-type Seat = { name: string; isMe: boolean; pawns: string[] };
+type Seat = { id?: string; name: string; isMe: boolean; pawns: string[] };
 
 /** Used when the lobby roster isn't in sessionStorage (e.g. direct link). */
 const FALLBACK: Seat[] = [
@@ -21,7 +21,7 @@ const FALLBACK: Seat[] = [
 /** One video tile per player at the table — your live tile plus the rest. */
 export function VideoGrid() {
   const { game } = useGame();
-  const { stream, camOn, micOn, toggleCam, toggleMic } = useMedia();
+  const { stream, camOn, micOn, toggleCam, toggleMic, peers: onCall } = useMedia();
   const params = useParams<{ code: string }>();
   const code = (Array.isArray(params.code) ? params.code[0] : params.code ?? "").toUpperCase();
 
@@ -62,15 +62,20 @@ export function VideoGrid() {
             onToggleCam={toggleCam}
             onToggleMic={toggleMic}
           />
-          {peers.map((s, i) => (
-            <PeerTile
-              key={`${s.name}-${i}`}
-              name={s.name}
-              colorVar={colorOf(s)}
-              speaking={speaking(s)}
-              micOn
-            />
-          ))}
+          {peers.map((s, i) => {
+            const c = s.id ? onCall.find((p) => p.id === s.id) : undefined;
+            return (
+              <PeerTile
+                key={s.id ?? `${s.name}-${i}`}
+                name={s.name}
+                colorVar={colorOf(s)}
+                speaking={speaking(s) || !!c?.speaking}
+                stream={c?.stream ?? null}
+                camOn={c?.camOn ?? false}
+                micOn={c?.micOn ?? true}
+              />
+            );
+          })}
         </div>
       </div>
     </div>
