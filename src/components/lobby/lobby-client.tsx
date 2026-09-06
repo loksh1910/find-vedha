@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
 } from "react";
@@ -55,6 +56,15 @@ const COUNTDOWN_MS = 5_000;
 const SOLO_COUNTDOWN_MS = 10_000;
 const ME = "me";
 const CPU = "cpu";
+
+/** the states the lobby UI knows how to render; anything else means the game is on */
+const LOBBY_PHASES: Phase[] = [
+  "roster",
+  "selecting",
+  "locked",
+  "ready",
+  "countdown",
+];
 
 /** the caller's id for claim / ready checks — "me" in solo, the real uid otherwise */
 function nextClaims(prev: Claims, slotId: SlotId, myId: string): Claims {
@@ -142,7 +152,18 @@ export function LobbyClient({ code, solo = false }: { code: string; solo?: boole
     if (solo || !lobby.roomRow) return;
     const r = lobby.roomRow;
     /* eslint-disable react-hooks/set-state-in-effect -- sync external row → local */
-    setPhase(r.status as Phase);
+    // `rooms.status` goes "starting" → "playing" as the host creates the game
+    // row. Neither is a lobby Phase: hold the "starting" beat so its overlay
+    // routes everyone to /play instead of unmounting itself mid-transition.
+    // Any other unknown status (e.g. a finished "over") drops back to "roster".
+    if (r.status === "starting" || r.status === "playing") {
+      setPhase("starting");
+      setClaims((r.claims ?? {}) as Claims);
+      return;
+    }
+    setPhase(
+      LOBBY_PHASES.includes(r.status as Phase) ? (r.status as Phase) : "roster",
+    );
     setClaims((r.claims ?? {}) as Claims);
     setReadyIds(r.ready ?? []);
     setSelectDeadline(r.select_deadline ? Date.parse(r.select_deadline) : 0);
@@ -271,6 +292,7 @@ export function LobbyClient({ code, solo = false }: { code: string; solo?: boole
   }, [solo, phase, deadline]);
 
   /* ---- lobby is done: stash the roster, and (host) create the game row ---- */
+  const startFiredRef = useRef(false);
   useEffect(() => {
     if (phase !== "starting") return;
     try {
@@ -288,11 +310,14 @@ export function LobbyClient({ code, solo = false }: { code: string; solo?: boole
     } catch {
       /* sessionStorage unavailable — game falls back to a full table */
     }
-    if (!solo && isHost) {
+    if (!solo && isHost && !startFiredRef.current) {
+      startFiredRef.current = true;
       void fetch("/api/game/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code }),
+      }).then((res) => {
+        if (!res.ok) startFiredRef.current = false; // let a retry through
       });
     }
   }, [phase, players, claims, code, solo, isHost]);

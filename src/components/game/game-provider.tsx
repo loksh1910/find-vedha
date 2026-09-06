@@ -24,6 +24,11 @@ import {
 import type { GameState, MoveTransport, Role } from "@/lib/game/types";
 import { createClient } from "@/lib/supabase/client";
 import { myPawns, type GameSeat } from "@/lib/game/seats";
+import {
+  useRoomChat,
+  type ChatMsg,
+  type ChatScope,
+} from "@/lib/realtime/use-room-chat";
 
 type Pending = { to: number; options: Move[] } | null;
 
@@ -35,6 +40,14 @@ type GameCtx = {
   toggleAutoDetectives: () => void;
   /** false for a networked game (each detective is a real player) */
   soloTools: boolean;
+
+  /** display name for this viewer's chat messages */
+  chatName: string;
+  /** this viewer may use the Detectives-only chat channel */
+  chatDet: boolean;
+  /** live room chat (public + — for Detectives — det); ephemeral, no history */
+  chat: ChatMsg[];
+  sendChat: (text: string, scope?: ChatScope) => void;
 
   activePawnId: string;
   myTurn: boolean;
@@ -160,6 +173,23 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const mine = useMemo(
     () => (solo ? null : myPawns(seats, uid)),
     [solo, seats, uid],
+  );
+
+  const chatName = useMemo(() => {
+    if (solo) return viewAs === "vedha" ? "You (Vedha)" : "You (Detective)";
+    return seats.find((s) => s.uid === uid)?.name ?? "Player";
+  }, [solo, viewAs, seats, uid]);
+
+  const chatDet = useMemo(() => {
+    if (solo) return viewAs === "detective";
+    return (mine ?? []).some((p) => p !== "vedha");
+  }, [solo, viewAs, mine]);
+
+  const chatMe = useMemo(() => ({ name: chatName }), [chatName]);
+  const { messages: chat, send: sendChat } = useRoomChat(
+    solo ? "" : code,
+    chatMe,
+    { det: chatDet },
   );
 
   const activePawnId = game.turn;
@@ -319,6 +349,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
     autoDetectives,
     toggleAutoDetectives,
     soloTools: solo,
+    chatName,
+    chatDet,
+    chat,
+    sendChat,
     activePawnId,
     myTurn,
     legalDest,

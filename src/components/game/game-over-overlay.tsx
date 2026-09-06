@@ -12,7 +12,7 @@ export function GameOverOverlay() {
   const code = (
     Array.isArray(params.code) ? params.code[0] : (params.code ?? "")
   ).toUpperCase();
-  const { game, newGame } = useGame();
+  const { game, newGame, soloTools } = useGame();
   // key the "dismissed" flag to this particular result, so a new game (or a
   // different ending) always shows the full result again with no effect.
   const [dismissedKey, setDismissedKey] = useState<string | null>(null);
@@ -43,6 +43,15 @@ export function GameOverOverlay() {
       solo = sessionStorage.getItem(`fv:solo:${code}`) === "1";
     } catch {
       /* sessionStorage unavailable */
+    }
+    if (!solo) {
+      // host-only server-side; a non-host's call 403s and is ignored. Resets
+      // the room to a fresh roster so the same players can pick roles again.
+      void fetch("/api/game/reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
     }
     router.push(solo ? `/room/${code}?solo=1` : `/room/${code}`);
   };
@@ -107,10 +116,18 @@ export function GameOverOverlay() {
           Look over the final board
         </button>
 
-        <div className="mt-4 flex justify-center gap-2">
-          <Button variant="primary" onClick={newGame}>
+        <div className="mt-4 flex flex-wrap justify-center gap-2">
+          {!soloTools && (
+            <Button
+              variant="primary"
+              onClick={() => router.push(`/room/${code}/results`)}
+            >
+              View results
+            </Button>
+          )}
+          <Button variant={soloTools ? "primary" : "default"} onClick={newGame}>
             <RotateCcw size={14} />
-            New game
+            {soloTools ? "New game" : "Rematch"}
           </Button>
           <Button variant="ghost" onClick={exitToLobby}>
             <LogOut size={14} />

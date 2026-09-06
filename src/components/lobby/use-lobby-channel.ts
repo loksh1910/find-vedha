@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { RealtimeChannel } from "@supabase/supabase-js";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useRoomChat } from "@/lib/realtime/use-room-chat";
+export type { ChatMsg } from "@/lib/realtime/use-room-chat";
 
 export type RoomRow = {
   id: string;
@@ -24,12 +25,10 @@ export type MemberRow = {
   avatarId: string;
 };
 
-export type ChatMsg = { id: string; from: string; text: string };
-
 /**
- * One Supabase Realtime channel per room. Mirrors the `rooms` row and the
- * roster live, carries lobby chat as ephemeral broadcast, and exposes the
- * writes the lobby needs. No-ops until `roomId` is known (and stays off for
+ * Mirrors the `rooms` row and the roster live over a postgres_changes channel,
+ * and exposes the writes the lobby needs. Lobby chat is delegated to the shared
+ * {@link useRoomChat} hook. No-ops until `roomId` is known (and stays off for
  * the solo flow, which never passes one).
  */
 export function useLobbyChannel(
@@ -40,8 +39,11 @@ export function useLobbyChannel(
   const supabase = useMemo(() => createClient(), []);
   const [roomRow, setRoomRow] = useState<RoomRow | null>(null);
   const [members, setMembers] = useState<MemberRow[]>([]);
-  const [chat, setChat] = useState<ChatMsg[]>([]);
-  const chanRef = useRef<RealtimeChannel | null>(null);
+
+  const { messages: chat, send: sendRoomChat } = useRoomChat(
+    roomId ? code : "",
+    me,
+  );
 
   useEffect(() => {
     if (!roomId) return;
@@ -84,8 +86,16 @@ export function useLobbyChannel(
     void loadRoom();
     void loadMembers();
 
-    const chan = supabase
-      .channel(`lobby:${code}`, { config: { broadcast: { self: false } } })
+    // realtime can miss a message across a tab switch / sleep — reconcile on focus
+    const onFocus = () => {
+      void loadRoom();
+      void loadMembers();
+    };
+    window.addEventListener("focus", onFocus);
+
+    // room state (row + roster) — postgres_changes
+    const roomChan = supabase
+      .channel(`lobby:${code}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "rooms", filter: `id=eq.${roomId}` },
@@ -105,17 +115,12 @@ export function useLobbyChannel(
         },
         () => void loadMembers(),
       )
-      .on("broadcast", { event: "chat" }, ({ payload }) => {
-        setChat((c) => [...c.slice(-49), payload as ChatMsg]);
-      })
       .subscribe();
-
-    chanRef.current = chan;
 
     return () => {
       alive = false;
-      void supabase.removeChannel(chan);
-      chanRef.current = null;
+      window.removeEventListener("focus", onFocus);
+      void supabase.removeChannel(roomChan);
     };
   }, [supabase, roomId, code]);
 
@@ -130,21 +135,8 @@ export function useLobbyChannel(
   );
 
   const sendChat = useCallback(
-    (text: string) => {
-      const t = text.trim();
-      if (!t || !chanRef.current || !me) return;
-      const msg: ChatMsg = {
-        id:
-          typeof crypto !== "undefined" && crypto.randomUUID
-            ? crypto.randomUUID()
-            : `${Date.now()}-${Math.random()}`,
-        from: me.name,
-        text: t,
-      };
-      void chanRef.current.send({ type: "broadcast", event: "chat", payload: msg });
-      setChat((c) => [...c.slice(-49), msg]); // echo my own straight away
-    },
-    [me],
+    (text: string) => sendRoomChat(text, "public"),
+    [sendRoomChat],
   );
 
   const kick = useCallback(
