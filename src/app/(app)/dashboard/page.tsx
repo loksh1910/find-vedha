@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Plus, Circle } from "lucide-react";
+import { ArrowRight, Plus, Circle, Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { SegmentedInput } from "@/components/ui/segmented-input";
+import { ComputerArt } from "@/components/game/mode-art";
 import { useAppState } from "@/components/providers/app-state-provider";
 import {
   MOCK_FRIENDS,
@@ -88,6 +89,29 @@ export default function DashboardPage() {
               </Button>
             </div>
           </div>
+        </div>
+
+        <div className="flex flex-col gap-4 rounded-lg border border-line bg-surface p-5 sm:col-span-2 sm:flex-row sm:items-center">
+          <div className="w-full shrink-0 sm:w-[200px]">
+            <ComputerArt />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h2 className="flex items-center gap-2 font-display text-lg font-bold text-text">
+              <Bot size={17} className="text-signal" />
+              Play with computer
+            </h2>
+            <p className="mt-1 text-sm text-muted">
+              No setup — pick Vedha or a Detective and the computer takes every
+              other role.
+            </p>
+          </div>
+          <Button
+            variant="default"
+            className="shrink-0"
+            onClick={() => router.push("/room/SOLO?solo=1")}
+          >
+            Start <ArrowRight size={15} />
+          </Button>
         </div>
       </div>
 
