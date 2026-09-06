@@ -265,10 +265,9 @@ const CARDS = [
 const N = CARDS.length;
 const STEP = 360 / N; // degrees between neighbouring cards on the ring
 
-/* wheel travel → ring behaviour */
-const INTRO_PX = 220; // wheel distance that slides the ring in before it starts turning
-const DEG_PER_PX = 0.16; // ring rotation per pixel of wheel travel
-const MAX_ACC = INTRO_PX + ((N - 1) * STEP) / DEG_PER_PX; // clamp at the last card
+/* wheel travel → ring rotation. The ring is on screen from the first paint
+   and loops through the six cards forever. */
+const DEG_PER_PX = 0.16;
 
 /* ring geometry, inside the fixed right-hand rail */
 const RAIL_W = 620;
@@ -294,19 +293,16 @@ function CardFace({ c }: { c: (typeof CARDS)[number] }) {
 }
 
 export function CardRing({ interactive }: { interactive: boolean }) {
-  // `acc` = accumulated wheel travel (px); `seen` = its high-water mark, which
-  // drives the one-time slide-in so the ring doesn't re-hide on scroll-up.
-  const [st, setSt] = useState({ acc: 0, seen: 0 });
+  // signed wheel travel (px) — drives the rotation, unbounded, so the ring
+  // loops through the six cards forever in both directions.
+  const [spin, setSpin] = useState(0);
 
   useEffect(() => {
     if (!interactive) return;
 
     const busy = () => !!document.querySelector('[role="dialog"]');
     const advance = (px: number) =>
-      setSt(({ acc, seen }) => {
-        const next = Math.min(MAX_ACC, Math.max(0, acc + px));
-        return { acc: next, seen: Math.max(seen, next) };
-      });
+      setSpin((s) => Math.max(-1e6, Math.min(1e6, s + px)));
     const onWheel = (e: WheelEvent) => {
       if (busy()) return;
       e.preventDefault();
@@ -317,12 +313,10 @@ export function CardRing({ interactive }: { interactive: boolean }) {
       const tag = (e.target as HTMLElement | null)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA") return;
       const map: Record<string, number> = {
-        ArrowDown: 110,
-        PageDown: 300,
-        ArrowUp: -110,
-        PageUp: -300,
-        Home: -MAX_ACC,
-        End: MAX_ACC,
+        ArrowDown: 120,
+        PageDown: 320,
+        ArrowUp: -120,
+        PageUp: -320,
       };
       if (!(e.key in map)) return;
       e.preventDefault();
@@ -342,13 +336,16 @@ export function CardRing({ interactive }: { interactive: boolean }) {
     };
   }, [interactive]);
 
-  const rot = Math.max(0, st.acc - INTRO_PX) * DEG_PER_PX;
-  const intro = Math.min(1, st.seen / INTRO_PX);
+  const rot = spin * DEG_PER_PX;
   const active = ((Math.round(rot / STEP) % N) + N) % N;
 
+  // spin to the nearest turn of the ring that brings card `i` to the front
   const jump = (i: number) => {
-    const target = INTRO_PX + (i * STEP) / DEG_PER_PX;
-    setSt((s) => ({ acc: target, seen: Math.max(s.seen, target) }));
+    setSpin((s) => {
+      const target = i * STEP;
+      const turns = Math.round((s * DEG_PER_PX - target) / 360);
+      return (turns * 360 + target) / DEG_PER_PX;
+    });
   };
 
   /* ---- reduced-motion / small screens: a plain, static grid ---- */
@@ -371,44 +368,60 @@ export function CardRing({ interactive }: { interactive: boolean }) {
   return (
     <div
       className="pointer-events-none fixed inset-y-0 right-0 z-10 hidden lg:block"
-      style={{
-        width: RAIL_W,
-        opacity: intro,
-        transform: `translateX(${((1 - intro) * 96).toFixed(1)}px)`,
-        transition: "opacity 480ms var(--ease), transform 480ms var(--ease)",
-      }}
+      style={{ width: RAIL_W }}
       aria-hidden
     >
       <p className="eyebrow absolute right-10 top-24 text-right">How a game goes</p>
 
       <div className="absolute top-1/2" style={{ left: CX }}>
+        {/* soft blue bloom parked at the front slot */}
+        <div
+          aria-hidden
+          className="absolute left-0 top-0 rounded-[28px]"
+          style={{
+            width: CARD_W,
+            height: CARD_H,
+            transform: `translate(calc(-50% + ${(-R).toFixed(1)}px), -50%)`,
+            background: "var(--signal)",
+            filter: "blur(40px)",
+            opacity: 0.16,
+            zIndex: 0,
+          }}
+        />
         {CARDS.map((c, i) => {
           const raw = i * STEP - rot;
           const rel = (((raw % 360) + 540) % 360) - 180; // -180..180, 0 = front
           const ad = Math.abs(rel);
-          const rad = ((180 + raw) * Math.PI) / 180;
+          const rad = ((180 + rel) * Math.PI) / 180;
           const x = R * Math.cos(rad);
           const y = R * Math.sin(rad);
           const scale = Math.max(0.5, 1 - ad * 0.0075);
           const opacity = Math.max(0, Math.min(1, 1.1 - ad / 95));
           const front = ad < 6;
+          const glow = Math.max(0, 1 - ad / 12); // 1 at dead-front, gone by 12°
+          const baseShadow = "0 36px 90px -30px rgba(0,0,0,0.9)";
           const style: CSSProperties = {
             width: CARD_W,
             height: CARD_H,
             transform: `translate(calc(-50% + ${x.toFixed(1)}px), calc(-50% + ${y.toFixed(1)}px)) scale(${scale.toFixed(3)})`,
             opacity: opacity.toFixed(3),
             zIndex: 200 - Math.round(ad),
+            borderColor: `color-mix(in oklab, var(--signal) ${(glow * 100).toFixed(0)}%, var(--line-strong))`,
             filter: front
               ? undefined
               : `blur(${Math.min(1.8, ad * 0.02).toFixed(2)}px) brightness(${Math.max(0.66, 1 - ad * 0.003).toFixed(2)})`,
+            boxShadow:
+              glow > 0.01
+                ? `${baseShadow}, 0 0 0 1px color-mix(in oklab, var(--signal) ${(glow * 85).toFixed(0)}%, transparent), 0 0 ${(20 * glow).toFixed(0)}px ${(2 * glow).toFixed(1)}px color-mix(in oklab, var(--signal) ${(glow * 62).toFixed(0)}%, transparent), 0 0 ${(60 * glow).toFixed(0)}px ${(10 * glow).toFixed(0)}px color-mix(in oklab, var(--signal) ${(glow * 30).toFixed(0)}%, transparent)`
+                : baseShadow,
             transition:
-              "transform 500ms var(--ease), opacity 380ms linear, filter 300ms linear",
+              "transform 500ms var(--ease), opacity 380ms linear, filter 300ms linear, box-shadow 320ms linear, border-color 320ms linear",
           };
           return (
             <article
               key={c.n}
               style={style}
-              className="absolute left-0 top-0 flex flex-col overflow-hidden rounded-2xl border border-line-strong bg-surface shadow-[0_36px_90px_-30px_rgba(0,0,0,0.9)] will-change-transform"
+              className="absolute left-0 top-0 flex flex-col overflow-hidden rounded-2xl border bg-surface will-change-transform"
             >
               <CardFace c={c} />
             </article>
@@ -416,16 +429,16 @@ export function CardRing({ interactive }: { interactive: boolean }) {
         })}
       </div>
 
-      {/* progress rail — click a dot to spin to that card */}
-      <div className="pointer-events-auto absolute bottom-12 right-10 flex items-center gap-2">
+      {/* progress rail — vertical, centre-right; click a dot to spin to that card */}
+      <div className="pointer-events-auto absolute right-6 top-1/2 flex -translate-y-1/2 flex-col items-center gap-2.5">
         {CARDS.map((c, i) => (
           <button
             key={c.n}
             onClick={() => jump(i)}
             aria-label={`Go to “${c.title}”`}
-            className="h-2 rounded-full transition-all duration-300"
+            className="w-2 rounded-full transition-all duration-300"
             style={{
-              width: i === active ? 26 : 8,
+              height: i === active ? 26 : 8,
               background: i === active ? "var(--signal)" : "var(--line-strong)",
             }}
           />
