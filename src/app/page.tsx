@@ -6,11 +6,12 @@ import { useRouter } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 import { Logo } from "@/components/shell/logo";
 import { MagnifyMap } from "@/components/landing/magnify-map";
+import { MapChatter } from "@/components/landing/map-chatter";
 import { GameModeDialog } from "@/components/landing/game-mode-dialog";
 import { AuthDialog } from "@/components/auth/auth-dialog";
+import { ProfileMenu } from "@/components/auth/profile-menu";
 import { ManualDialog } from "@/components/manual/manual-dialog";
 import { Button } from "@/components/ui/button";
-import { Avatar } from "@/components/ui/avatar";
 import { useAppState } from "@/components/providers/app-state-provider";
 
 const STEPS = [
@@ -35,7 +36,7 @@ const REVEALS = [3, 8, 13, 18, 24];
 
 export default function LandingPage() {
   const router = useRouter();
-  const { hydrated, isSignedIn, session, signOut } = useAppState();
+  const { hydrated, isSignedIn } = useAppState();
   const [authOpen, setAuthOpen] = useState(false);
   const [modeOpen, setModeOpen] = useState(false);
 
@@ -50,25 +51,21 @@ export default function LandingPage() {
       <MagnifyMap />
       {/* keep the copy readable over the map */}
       <div className="pointer-events-none fixed inset-0 bg-gradient-to-b from-bg/75 via-bg/45 to-bg/90" />
+      <MapChatter />
 
       <div className="relative z-10 mx-auto flex min-h-dvh max-w-[1100px] flex-col px-6 md:px-10">
         <header className="flex items-center justify-between py-5">
-          <Logo />
-          <nav className="flex items-center gap-1">
+          <span data-chatter-avoid>
+            <Logo />
+          </span>
+          <nav data-chatter-avoid className="flex items-center gap-1">
             <ManualDialog />
             {hydrated && isSignedIn ? (
               <>
                 <Link href="/dashboard">
                   <Button size="sm">Go to dashboard</Button>
                 </Link>
-                <button
-                  onClick={signOut}
-                  title="Sign out"
-                  aria-label="Sign out"
-                  className="ml-1 rounded-full ring-1 ring-line-strong transition hover:ring-signal"
-                >
-                  <Avatar name={session?.username ?? "You"} avatarId={session?.avatarId} size={32} />
-                </button>
+                <ProfileMenu />
               </>
             ) : (
               <Button size="sm" onClick={() => setAuthOpen(true)}>
@@ -79,16 +76,26 @@ export default function LandingPage() {
         </header>
 
         <section className="flex flex-1 flex-col items-center justify-center py-16 text-center">
-          <p className="eyebrow">A hidden-chase game on the Chennai transit map</p>
-          <h1 className="mt-4 font-display text-7xl font-extrabold leading-[0.95] tracking-tight text-text sm:text-8xl">
+          <p data-chatter-avoid data-chatter-core className="eyebrow">
+            A hidden-chase game on the Chennai transit map
+          </p>
+          <h1
+            data-chatter-avoid
+            data-chatter-core
+            className="mt-4 font-display text-7xl font-extrabold leading-[0.95] tracking-tight text-text sm:text-8xl"
+          >
             Find Vedha
           </h1>
-          <p className="mt-6 max-w-[52ch] text-lg text-muted">
+          <p
+            data-chatter-avoid
+            data-chatter-core
+            className="mt-6 max-w-[52ch] text-lg text-muted"
+          >
             One player slips into the city and moves in secret. The rest give
             chase across the transit map — twenty-four rounds to close in.
           </p>
 
-          <div className="mt-9">
+          <div data-chatter-avoid className="mt-9">
             <Button size="lg" variant="primary" onClick={onPlay}>
               Play game
               <ArrowRight size={17} />
@@ -96,7 +103,7 @@ export default function LandingPage() {
           </div>
 
           {/* transit-line strip: the reveal schedule */}
-          <div className="mt-14 w-full max-w-[520px]">
+          <div data-chatter-avoid className="mt-14 w-full max-w-[520px]">
             <div className="mb-2 flex items-center justify-between">
               <span className="eyebrow">Vedha surfaces on</span>
               <span className="font-mono text-xs text-faint">round 1 → 24</span>
