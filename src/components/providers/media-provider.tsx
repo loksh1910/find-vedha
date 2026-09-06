@@ -101,9 +101,13 @@ export function MediaProvider({ children }: { children: ReactNode }) {
   const ensureCall = useCallback(async (): Promise<DailyCall> => {
     if (callRef.current) return callRef.current;
     const Daily = (await import("@daily-co/daily-js")).default;
-    const existing = Daily.getCallInstance?.();
-    const call =
-      existing ?? Daily.createCallObject({ subscribeToTracksAutomatically: true });
+    let call: DailyCall;
+    try {
+      call = Daily.createCallObject({ subscribeToTracksAutomatically: true });
+    } catch {
+      // a previous instance still exists (Fast Refresh, remount) — reuse it
+      call = Daily.getCallInstance() as DailyCall;
+    }
     call
       .on("joined-meeting", sync)
       .on("participant-joined", sync)
@@ -114,10 +118,21 @@ export function MediaProvider({ children }: { children: ReactNode }) {
       .on("active-speaker-change", (ev) => {
         const sid = ev?.activeSpeaker?.peerId;
         setPeers((ps) => ps.map((p) => ({ ...p, speaking: p.sessionId === sid })));
+      })
+      .on("error", (ev) => {
+        console.error("[media] daily error", ev);
       });
     callRef.current = call;
     return call;
   }, [sync]);
+
+  const dailyMessage = (err: unknown): string => {
+    if (err && typeof err === "object") {
+      const e = err as { errorMsg?: string; error?: { msg?: string }; message?: string };
+      return e.errorMsg || e.error?.msg || e.message || "Could not connect to the call.";
+    }
+    return typeof err === "string" ? err : "Could not connect to the call.";
+  };
 
   const choose = useCallback(
     async ({ cam, mic }: { cam: boolean; mic: boolean }) => {
@@ -138,18 +153,33 @@ export function MediaProvider({ children }: { children: ReactNode }) {
         const { url, token } = (await res.json()) as { url: string; token: string };
 
         const call = await ensureCall();
-        if (call.meetingState() === "new" || call.meetingState() === "left-meeting") {
-          await call.join({ url, token, startVideoOff: !cam, startAudioOff: !mic });
-        } else {
+        const state = call.meetingState();
+
+        if (state === "joined-meeting") {
           await call.setLocalVideo(cam);
           await call.setLocalAudio(mic);
+        } else {
+          if (state !== "new") {
+            try {
+              await call.leave();
+            } catch {
+              /* fine */
+            }
+          }
+          try {
+            await call.join({ url, token, startVideoOff: !cam, startAudioOff: !mic });
+          } catch (joinErr) {
+            console.error("[media] join with devices failed, retrying receive-only", joinErr);
+            // couldn't open the camera/mic — join anyway so they can still see/hear
+            await call.join({ url, token, startVideoOff: true, startAudioOff: true });
+            setError("Couldn't reach your camera/mic — connected in view-only mode.");
+          }
         }
         setPhase("live");
         sync();
       } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Could not connect to the call.",
-        );
+        console.error("[media] choose failed", err);
+        setError(dailyMessage(err));
         setPhase("error");
       }
     },
