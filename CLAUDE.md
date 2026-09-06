@@ -8,23 +8,24 @@ Guidance for Claude Code (claude.ai/code) working in this repository. These inst
 
 **Find Vedha** (working title) — a browser-based multiplayer social-deduction game: Scotland Yard–style hidden-movement mechanics on an original **Chennai-themed board**, wrapped in a chess.com-style social platform (private rooms, invite codes, lobby, live video + text chat, profiles, stats). No real IP — original character names, original board, no licensed content.
 
-**Master reference:** [SITEMAP.md](SITEMAP.md) is the authoritative list of every screen and state. **If something is not in SITEMAP.md, do not build it without adding it there first.** If the user approves a change mid-build, update SITEMAP.md to match in the same session.
+**References:** [SITEMAP.md](SITEMAP.md) is the original screen-and-state spec — thorough on intent, but **now behind the code** (predates the landing redesign, real backend, Phase 5–7). This file's **Build order** table + **Where things live** are the current source of truth for what exists. Still add new screens/states to SITEMAP.md when the user approves them, and give it a proper refresh pass when there's time.
 
-**Current status:** Scaffolded (Next.js 16 + React 19 + Tailwind v4). Everything below runs on **mock client-side state — no backend yet.**
+**Current status (2026-09):** Next.js 16 + React 19 + Tailwind v4, **real Supabase backend wired** (project `kjtnzujbqrnakkkbvllj`). Phases 1–5 done, Phase 6 text chat done (video built but disabled), Phase 7 part-done. See the Build order table for per-phase status.
 
-- **Phase 1 front-of-house (built):** Landing → Auth → Dashboard → Create Room → Join → Lobby (5 phases: roster → 10s role claim → auto-fill → ready-up → 5s countdown) → transition.
-- **In-game screen (built as an interactive mock):** `/room/[code]/play` is a playable Vedha-vs-Detective game running a client-side mock engine — 24-round turn machine, legal moves, ticket spend + handoff, Wildcard, Double-Move, reveal rounds, win detection. A `View: Vedha / View: Detectives` switch shows both interfaces; an `Auto Detectives` toggle is a demo AI. **The board is a 63-node placeholder lattice, not the authored 199-node Chennai board (Phase 3).**
+- **Phases 1–4 (done):** Landing → Auth → Dashboard → Create/Join → Lobby (5-phase machine) → transition → in-game screen, on the **real 199-node Chennai board** with the real pure-function engine (24 rounds, legal moves, ticket spend + handoff, Wildcard, Double-Move, reveal rounds, win/loss).
+- **Phase 2 (done):** real Supabase auth (email/password + guest), rooms + invite codes, live Lobby over Realtime (roster / claims / ready / countdowns synced, host-driven phase machine, host migration), lobby text chat.
+- **Phase 5 (done):** server-authoritative game state. Moves go through `/api/game/*` routes (service-role writer); clients read via the `get_game` RPC which **redacts Vedha's node + trail** (sentinel `-1`) for Detective viewers except on reveal rounds / at game end. The `games` table has RLS on with no policies.
+- **Phase 6 (text done, video parked):** lobby + in-game chat are real (Realtime broadcast for live delivery + `room_chat` table for history; Detectives-only scope is DB-enforced). Peer video/audio via Daily is fully built but gated off behind `VIDEO_ENABLED = false` in `media-provider.tsx` — Daily's free tier needs a card on file; user chose to defer.
+- **Phase 7 (part done):** Results screen (`/room/[code]/results`, `/m/[id]`) and Profile & stats (`/profile`, `/u/[username]`) are built and wired to a `matches` archive. Friends not started.
 
-`npm run build` + `npm run lint` clean; both flows walked end-to-end in the browser with no console errors.
-
-**Next up:** refine the in-game visuals (node clarity, mesh density, letterbox) and per-screen design polish with the user; then Phase 2 (Supabase) and Phase 3 (real board graph).
+`npm run build` + `npm run lint` are kept clean.
 
 ---
 
 ## How to work on this project — process rules
 
-1. **Phase discipline (see "Build order" below).** We are at Phase −1 → Phase 0. Do not jump ahead.
-2. **Phase 0 = per-screen layout, user-driven.** Before designing or coding **any** screen, ask the user to describe the layout they want for that screen. Present it back as a plan or rough static mockup. Build it only after they confirm. **Never invent a layout on the user's behalf.** One screen at a time.
+1. **Phase discipline (see "Build order" below).** Currently in Phase 7 (Friends left) → Phase 8. Do not jump ahead.
+2. **Per-screen layout is user-driven.** Before designing or coding **any** new screen, ask the user to describe the layout, or present a rough static mockup for them to react to. Build only after they confirm. **Never invent a layout on the user's behalf.** One screen at a time. The user is a designer; walk them step-by-step through any Supabase dashboard task (SQL Editor, Auth settings) — they will say they can't find files/settings.
    - Run every visual/UI decision through [`.claude/skills/frontend-design/SKILL.md`](.claude/skills/frontend-design/SKILL.md) — see "Frontend design approach" below.
 3. **Incremental checkpoints.** Build one feature, confirm it works (`npm run dev` + the user reviews on localhost), commit, then move on. No giant untested piles of code.
 4. **Always run `npm run build` before calling a change done** — it runs the TypeScript check that `dev` doesn't surface until you touch the page.
@@ -111,7 +112,7 @@ A **design system doc** (`DESIGN_SYSTEM.md`) will be created during Phase 0 once
 | Ticket handoff | **Implemented (real Scotland Yard rule).** When a Detective spends an Auto / Bus / Metro ticket, that ticket is added to Vedha's wallet and Vedha may spend it on a later turn. Vedha's **Wildcard and Double-Move counts are never increased this way** (they stay at the fixed 5 / 2). Detectives never get tickets back — their wallets only shrink. |
 
 ### Hidden-info enforcement (non-negotiable)
-The Runner's real position must be **server-authoritative** and never sent to Detective clients except on reveal rounds / at game end — enforce with Supabase Row Level Security, not just client-side hiding, or it's inspectable via browser dev-tools. Move validation, catch detection, turn/round progression, and win/lose resolution are all validated database-side. *(The current mock does hidden-info in the UI layer only — that's a placeholder until Phase 5.)*
+The Runner's real position must be **server-authoritative** and never sent to Detective clients except on reveal rounds / at game end. **Implemented (Phase 5):** the full `GameState` lives in the `games` table (RLS on, no policies — clients can't read it directly). Writes go through service-role API routes (`/api/game/{start,move,double,reset}`) that re-validate every move with the same pure `engine.ts` functions. Clients read only via the `get_game(code)` SECURITY DEFINER RPC, which returns Vedha's node as `-1` and rewrites non-revealed trail entries to `-1` unless the caller controls Vedha, it's a reveal round, or the game is over. `games` is deliberately **not** in the Realtime publication (a row-change payload would leak the raw state) — the API routes send a contentless `game` broadcast on `room:<CODE>` and clients re-fetch.
 
 ---
 
@@ -119,17 +120,23 @@ The Runner's real position must be **server-authoritative** and never sent to De
 
 | Path | What |
 |---|---|
-| `src/app/` | routes. `(app)/` = route group with the left-rail shell + mock auth guard. `room/[code]/` (Lobby, `play/`) sits outside the group — full-bleed, no guard. |
-| `src/components/providers/app-state-provider.tsx` | mock session + created rooms (`localStorage`). `useAppState()`. |
-| `src/components/shell/` | left rail, auth shell, route diagram bg, logo, placeholder screens. |
-| `src/components/lobby/` | the 5-phase Lobby machine (`lobby-client.tsx`) + slot card + transition. |
-| `src/components/manual/` | `<ManualContent>` (rules) + `<ManualDialog>` — reused on Landing, Lobby, in-game. |
-| `src/components/game/` | the in-game screen. `game-provider.tsx` holds live `GameState` + `viewAs` + demo controls; `game-screen.tsx` assembles HUD / board / rail / ticket panel / move controls; `board-canvas.tsx` + `node-marker.tsx` render the SVG board (capsule markers). |
-| `src/lib/game/` | `types.ts` (GameState, reveal rounds) + `engine.ts` (pure: `createGame`, `legalMoves`, `applyMove`, `declareDoubleMove`, `autoDetectiveMove`). |
-| `src/lib/board/board-data.ts` | **placeholder** 63-node lattice board (procedural). Replace in Phase 3 with the authored 199-node graph — keep the `Board` / `BoardNode` / `BoardEdge` shape. |
-| `src/lib/roles.ts` | slot defs (`DETECTIVE_SLOTS`), colours, `autoFill`. Slot CSS vars stay `--tr-1`…`--tr-5`. |
-| `src/lib/mock.ts` | static mock data (friends, stats, lobby bots). |
-| `src/app/globals.css` + `DESIGN_SYSTEM.md` | dark-only tokens. In-game palette: `--game-canvas` (near-black), `--game-accent` (cyan — used instead of amber on the game screen so it doesn't fight the yellow board), `--reveal` (magenta), `--t-river`. |
+| `src/app/` | routes. `(app)/` = route group with the left-rail shell + auth guard (`useAppState`). `room/[code]/` (Lobby, `play/`, `results/`) and `m/[id]/` sit **outside** the group — full-bleed, no guard. |
+| `src/app/api/game/{start,move,double,reset}/route.ts` | server-authoritative game endpoints. Auth + room-membership gate via `roomContext()`; write with the service-role client; `pingRoom()` broadcasts a contentless `game` event. `move` also archives a `matches` row on game-over. |
+| `src/app/api/daily/room/route.ts` | Daily room + meeting-token minting. Inert while `VIDEO_ENABLED = false`. |
+| `src/proxy.ts` | Next 16 middleware (renamed from `middleware.ts`) — refreshes the Supabase session cookie. Does not redirect; the `(app)` layout owns routing. |
+| `src/lib/supabase/` | `client.ts` (`createBrowserClient`), `server.ts` (`createServerClient` w/ cookies), `admin.ts` (service-role, **server only**, sole writer of `games`/`matches`). API keys are the new `sb_publishable_…` / `sb_secret_…` format. |
+| `supabase/migrations/` | `20260906120000_phase2_auth_rooms.sql` (profiles, rooms, room_members, `is_room_member`/`is_room_host`/`room_by_code` helpers, RLS, `handle_new_user` trigger, Realtime publication) · `20260906130000_phase5_games.sql` (`games` + `get_game`) · `20260907120000_phase6_chat.sql` (`room_chat` + `is_room_detective`/`get_chat`/`post_chat`) · `20260907130000_phase7_matches.sql` (`matches` + `get_match`/`get_latest_match`/`get_my_matches`/`get_player_stats`). All idempotent; the user runs them by hand in the SQL Editor. |
+| `src/components/providers/app-state-provider.tsx` | real Supabase auth + rooms. `useAppState()` → `session` (`{username,avatarId}` from `profiles`), `userId`, `isGuest`, `hydrated`, `signInWithPassword`/`signUp`/`signInAsGuest`/`signOut`, `createRoom`/`joinRoom`/`findRoom`. |
+| `src/components/lobby/` | `lobby-client.tsx` (5-phase machine; multiplayer mirrors the realtime `rooms` row, host drives the phase machine + host migration) · `use-lobby-channel.ts` (per-room `postgres_changes` channel for row + roster; delegates chat to `useRoomChat`) · slot card + transition. |
+| `src/lib/realtime/use-room-chat.ts` | shared chat hook (lobby + in-game). Live delivery on `chat:<CODE>` / `chat:<CODE>:det` broadcast channels; history + durable writes via `get_chat`/`post_chat`. De-dupes by message id; auto-resubscribes. |
+| `src/components/game/` | in-game screen. `game-provider.tsx` — networked: loads via `get_game`, subscribes to the `game` ping, moves via the API routes; solo: fully local. Exposes `soloTools` (dev toggles, solo only), `chat`/`sendChat`/`chatName`/`chatDet`, `moveError`. `game-screen.tsx` assembles HUD / board / right-rail / ticket panel. `chat-panel.tsx` (`LiveChat` for MP, `SoloChat` scripted demo for solo). `game-over-overlay.tsx` (Exit game → `/api/game/reset`; multiplayer "View results"). |
+| `src/components/results/results-screen.tsx` | Results screen — reads `get_latest_match` (from `/room/[code]/results`) or `get_match` (from `/m/[id]`). |
+| `src/components/profile/profile-screen.tsx` | Profile & stats — `profiles` row + `get_player_stats`; own profile also loads `get_my_matches`. Served at `/profile` (self) and `/u/[username]`. |
+| `src/lib/game/` | `types.ts` (GameState) · `engine.ts` (pure: `createGame`, `legalMoves`, `applyMove`, `declareDoubleMove`, `autoDetectiveMove`, `lastKnownVedhaNode`) · `seats.ts` (`GameSeat` = `{uid,name,pawns[]}`, `seatsFromClaims`, `controlsPawn`, `myPawns`) · `server.ts` (`import "server-only"` — `roomContext`, `pingRoom`). |
+| `src/lib/board/board-data.ts` | the authored **199-node** Chennai graph (procedural generator, `TARGET = 199`). `Board` / `BoardNode` / `BoardEdge` shape; `nodeById(id)` guards out-of-range (and the `-1` redaction sentinel) → returns `BOARD.nodes[0]`. |
+| `src/lib/roles.ts` | slot defs (`ALL_SLOTS`, `DETECTIVE_SLOTS`, `VEDHA_SLOT`), colours, `autoFill`. Slot ids `vedha` / `t1`…`t5`; pawn ids `vedha` / `d1`…`d5` (`t{n}` → `d{n}`). Slot CSS vars `--tr-1`…`--tr-5`. |
+| `src/lib/mock.ts` | leftover static mock data — still feeds the **dashboard** side column (recent games / friends / stats snapshot). Replace when those get wired. |
+| `src/app/globals.css` + `DESIGN_SYSTEM.md` | dark-only tokens. In-game palette: `--game-canvas` (near-black), `--game-accent` (cyan), `--reveal` (magenta), muted transport tokens `--t-auto/-bus/-metro/-river`. **No `text-transform` anywhere** — labels are sentence case (per user: "no capital letters" = no uppercasing). |
 
 ---
 
@@ -143,12 +150,17 @@ The Runner's real position must be **server-authoritative** and never sent to De
 - `/room/[code]` — **the Lobby** (see its special rules below)
 - Lobby → game **transition animation** (transient, not a route)
 
-**Design now, build later:**
-- `/room/[code]/play` — In-Game (Vedha view vs Detective view; board, HUD with always-available Manual + Leave, colour-coded ticket panel, 24-round travel log, reveal-round state, stuck-pawn state, shared voice, public + detectives-only chat tabs). No turn timer, no deduction assist, no screen-share.
-  - **Leaving / disconnects:** anyone can `Leave game` any time. A **Detective** leaving or dropping → their pawn stays put and stops moving (abandoned; blocks its node; counts as stuck for win checks). **Any remaining player can click an abandoned pawn to take it over** for the rest of the game (keeps its node + tickets; one player may run several). Original resumes on reconnect only if nobody took it over. A **Vedha** drop **pauses the game** — remaining players see a blocking `Vedha has disconnected · Waiting for them to return…` overlay with an `Exit game` CTA (any player); pressing it → **Detectives win** ("Vedha left the game"). No auto-timeout; reconnect clears it. Vedha pressing `Leave game` = instant Detectives win.
-- `/room/[code]/results` — outcome, full reveal of Vedha's route, stat deltas, Rematch / Return to dashboard
-- `/u/[username]` Profile · `/game/[gameId]` Match Detail/Replay · `/friends` · `/settings`
-- Global: top nav, toast system, per-panel skeletons, empty/error states, 404/500, offline banner, confirm dialogs, presence dots, host migration
+**Built (Phase 4–7):**
+- `/room/[code]/play` — In-Game (board, HUD with Manual + Leave, colour-coded ticket panel, 24-round travel log, reveal-round + stuck-pawn state, right-rail Log / Players / Chat tabs). Solo shows a view-as toggle + Auto-Detectives demo; networked play hides those. No turn timer, no deduction assist, no screen-share.
+- `/room/[code]/results` and `/m/[id]` — outcome headline, Vedha's revealed route (mini diagram + ticket-tagged station list), per-player "the chase" line, reveal-round strip, Rematch / Back to lobby / Dashboard.
+- `/profile` (self) and `/u/[username]` — avatar + record header, stat band (Games / Win rate / As Vedha / As Detective), last-10 form strip; own profile also has the match-history table (rows → `/m/[id]`).
+
+**Not built yet:**
+- `/friends` — still a `PlaceholderScreen`. Needs a `friendships` table + screen (Phase 7 remainder).
+- `/settings` — `PlaceholderScreen` (Phase 8). "Edit profile" links here.
+- **Disconnect / abandonment handling** during a game (spec below) — not implemented. Currently a leaver's pawn just stops; nobody can take it over; no Vedha-drop pause.
+  - *Spec:* anyone can `Leave game` any time. A **Detective** leaving → pawn stays put, abandoned, blocks its node, counts as stuck. **Any remaining player can click an abandoned pawn to take it over** (keeps node + tickets). A **Vedha** drop **pauses the game** with a blocking overlay + `Exit game` CTA → **Detectives win**. Vedha pressing `Leave game` = instant Detectives win.
+- Global: toast system, per-panel skeletons, offline banner, 404/500 — mostly not built.
 
 **No `/room/[code]/reveal` route** — role assignment happens publicly inside the Lobby, not on a separate screen.
 
@@ -174,18 +186,20 @@ Edge cases: player leaves during B/C (slot re-opens / re-fills; below 2 players 
 
 | Phase | What | Status |
 |---|---|---|
-| **−1** | Full sitemap — SITEMAP.md. | in review (v2) |
-| **0** | Per-screen layout design, user-driven. Order: Landing → Manual → Auth → Dashboard → Create Room → Join → Lobby → Transition. Ask the user for each layout; confirm before building. | done through Lobby; in-game direction set with the user |
-| **1** | Front-of-house UI (Landing → Lobby → transition) on mocked local state. | **built** |
-| **2** | Wire Supabase: auth (username/avatar), rooms, invite codes, Lobby realtime (roster, 10s claim timer, auto-fill, ready-up, 5s countdown), host controls. | — |
-| **3** | Board data: the full **199-node Chennai graph** (ids, x/y coords, edges with transport type incl. ~2–4 Wildcard-only river edges, ~20 start-node flags) as JSON. Its own review checkpoint. | — (63-node placeholder in use) |
-| **4** | In-game engine (local): board renders from data, movement + ticket logic + handoff, Wildcard, Double-Move, hidden-Vedha logic, reveal rounds, win/loss detection, both interfaces, end-game screen. | **built as an interactive mock** on the placeholder board; needs the real board + visual refinement |
-| **5** | Realtime sync of in-game moves across tabs/devices (Supabase, RLS hides Vedha's node). | — |
-| **6** | Social layer: video chat (Daily.co), text chat wired to real channels. | — (tiles + chat are mock UI) |
-| **7** | Results, profiles, stats, match history, friends list. | — |
-| **8** | Polish (dark-only): node hover states, smooth pan/zoom, sound, move/reveal animations, onboarding. (Turn timer — deferred, not in scope.) | — |
+| **−1** | Full sitemap — SITEMAP.md. | done (may drift; see below) |
+| **0** | Per-screen layout design, user-driven. | done through Lobby + in-game + Phase 7 mockups |
+| **1** | Front-of-house UI (Landing → Lobby → transition). | **done** (+ landing card-ring redesign, hero slide-in) |
+| **2** | Supabase: auth (username/avatar/guest), rooms, invite codes, Lobby realtime, host controls, lobby chat. | **done** |
+| **3** | The authored **199-node Chennai graph** (coords, transport edges incl. Wildcard-only river edges, ~20 start nodes). | **done** (+ muted map redesign, road-following pending-move highlight) |
+| **4** | In-game engine: board from data, movement + tickets + handoff, Wildcard, Double-Move, hidden-Vedha, reveal rounds, win/loss, end-game overlay. | **done** on the real board |
+| **5** | Server-authoritative move sync + RLS hidden info. | **done** — API routes + `get_game` redaction; `+ /api/game/reset` returns a reusable lobby after "Exit game" |
+| **6** | Social layer: video (Daily.co) + text chat on real channels. | **text done** (lobby + in-game, live broadcast + `room_chat` persistence, DB-enforced Detectives-only scope). **Video built but OFF** (`VIDEO_ENABLED = false` — Daily needs a card; user deferred to last). |
+| **7** | Results, profiles, stats, match history, friends. | **partial** — Results + Profile/stats/history built & wired to the `matches` archive; **Friends not started** (needs a `friendships` migration + screen). |
+| **8** | Polish (dark-only): node hover states, smooth pan/zoom, sound, move/reveal/catch animations, onboarding, `/settings`. | not started (some polish landed ad-hoc: game-over review mode, transitions). |
 
-**Current build scope:** the whole flow Landing → Lobby → transition → in-game is clickable/playable on mock state. No Supabase, no real board graph, no realtime, no real video. There is no separate Role Reveal screen.
+**Remaining:** Phase 7 Friends → Phase 8 polish → (last) turn Daily video back on or rebuild it on raw WebRTC. Turn timer stays out of scope.
+
+**Solo "Play with computer"** still has no real AI — only the HUD "Auto Detectives" demo toggle and a scripted `SoloChat`. Real AI Detectives are a **v2 non-goal**.
 
 ---
 
@@ -219,13 +233,13 @@ Run **both** `npm run build` and `npm run lint` before considering a change done
 
 ---
 
-## Open questions (pending user answers — resolve before or during Phase 0)
+## Open questions
 
-1. **What triggers the 10-second role-selection timer?** Assumption: host presses "Lock roster & start role selection".
-2. **Avatars** — preset set only for MVP? (Assumed yes.)
-3. In-game build: brief Phase 1 says "two players on one screen" — accepted as a dev convenience; true Runner/Detective screen separation comes with Phase 2 networking.
+1. **Rematch behaviour** — the Results screen "Rematch — same players" currently calls `/api/game/start?force` (re-deals the same roles, new board, straight into `/play`, host only). "Back to lobby" resets the room to roster so roles can be re-picked. Confirm this split is what's wanted.
+2. **Profile stat set** — Games / Win rate / As Vedha / As Detective + last-10 form. No rating/ELO (assumed v2).
+3. **Friends "Invite"** — does it drop a friend straight into your lobby, or send a tap-to-join notification? (open — decide when building Friends)
 
-**Resolved:** Pursuers are called **Detectives** (not "Tracker"/"Chaser"). Runner-with-no-legal-move → Detectives win (matches official rule). River / Wildcard-only shortcut edges → **in scope**. Ticket handoff (Detectives' spent tickets → Vedha) → **in scope**.
+**Resolved:** Pursuers are **Detectives**. Runner-with-no-legal-move → Detectives win. River / Wildcard-only edges → in scope. Ticket handoff → in scope. Role-selection timer is triggered by the host ("Lock roster & start role selection") — **implemented**. Video → deferred to last (Daily card requirement). Casing → sentence case, never uppercase.
 
 ---
 
@@ -238,10 +252,21 @@ Run **both** `npm run build` and `npm run lint` before considering a change done
 5. **`preview_start` resolves `.claude/launch.json` from the session's primary working directory (the Loku project), not from SLY** — so `preview_start({ name: "find-vedha" })` starts the wrong server. Run `npm run dev` via a background shell and point the browser at `http://localhost:3000` with `preview_start({ url: … })` / `navigate` instead.
 6. **Verifying the in-game screen in the browser tool is fiddly.** With a viewport emulation larger than the pane, screenshots look like the layout collapsed and synthetic `ref`-clicks miss. It doesn't — `getBoundingClientRect()` is ground truth (the game screen fills `h-dvh` correctly). Verify with `javascript_tool` (read state, dispatch clicks on elements) and reset to the `desktop` preset for clean screenshots. The game screen is desktop-first (≥1280px comfortable).
 7. **The demo `autoDetectiveMove` must never read Vedha's real node** — it only knows the last *revealed* node (else it wanders). Early versions pathed straight to `state.pawns.vedha.node` and caught Vedha on round 1 every time.
+8. **`react-hooks/refs` also bans `useRef(createClient()).current`** — call a factory in `useRef`'s init and read `.current` in render → hard lint error. Use `const supabase = useMemo(() => createClient(), [])` everywhere instead.
+9. **Supabase `signOut()` default scope is `global`** — revokes *every* session for that user, which logs the browser out from under you during SDK test scripts. Use fresh short-lived clients in scripts and avoid `signOut()` (or pass `{ scope: 'local' }`).
+10. **`INSERT … RETURNING` re-checks the SELECT RLS policy on the new row.** A brand-new `rooms` row has no members, so the rooms SELECT policy is `using (is_room_member(id) or host_id = auth.uid())` — the `or host_id` is what lets a `createRoom` insert return. `room_members` join uses a plain `.insert` (an upsert with `ignoreDuplicates` tripped RLS) and treats error `23505` as "already a member".
+11. **Realtime: `postgres_changes` vs `broadcast`.** `postgres_changes` respects row-level RLS but ships *all* columns of a changed row — so `games` is kept out of the publication (it would leak state) and clients re-fetch on a contentless `broadcast`. `broadcast` is ephemeral (no history) — lobby/game chat uses it for live delivery and a `room_chat` table for history. Mixing `postgres_changes` + `broadcast` on one channel is flaky across HMR/reconnect; keep chat on its own `chat:<CODE>` channel.
+12. **A `to_jsonb(row)` inside a SECURITY DEFINER RPC serialises *every* selected column** — if the subquery also selects a sort key, it lands in the payload. Build the object with `jsonb_build_object(...)` and aggregate just that column (`jsonb_agg(x.msg order by x.sortkey)`), or alias every column to the camelCase the client expects.
+13. **`supabase.rpc()` / query builders are thenables, not Promises** — no `.catch()`. Use `try/catch` around `await`, or `.then(ok, err)`. A missing RPC resolves as `{ data: null, error }` (not a throw), so guard with `if (Array.isArray(data))`.
+14. **Daily.co free tier needs a card on file** — join fails with `account-missing-payment-method` and `GET /v1/` shows `config.allow_plan_free: false`. All video is gated behind `VIDEO_ENABLED` in `media-provider.tsx` until that's sorted.
+15. **The browser preview pane blocks `getUserMedia` entirely** and its screenshot capture sometimes freezes on the first frame after a scroll — verify page content with `javascript_tool` / `read_page`, not screenshots. Real-user camera tests need `claude-in-chrome` (their actual Chrome).
+16. **Standalone Node test scripts can't `import` from `src/`** (the `@/` path alias). Drive setup through the API routes / the browser, hit the RPCs directly with `@supabase/supabase-js`, or hand-craft `GameState` objects. Test users live at `*@fvtest.dev`.
+17. **Migrations are run by hand.** There's no `supabase` CLI wired — paste each `supabase/migrations/*.sql` into the dashboard SQL Editor. All are written `create … if not exists` / `create or replace` so they're safe to re-run.
 
 ## Design notes / refinements to make
 
-- **In-game board:** it's the 63-node placeholder — swap for the authored 199-node graph in Phase 3. Also: the three node types (Auto / Auto+Bus / Auto+Bus+Metro) could read clearer (the green/red semicircle caps are small at default zoom); the Auto mesh is visually busy; the board letterboxes horizontally (viewBox aspect vs. container).
-- **Lobby vertical balance** — short content, lots of empty space below on tall viewports. Centre the column or give chat more presence.
+- **Results "the chase" list** — one player holding several Detective pawns shows as a single row labelled with just the first pawn ("D1"). Fix the label (e.g. "D1–D5") or drop the per-pawn chip for multi-pawn seats.
+- **Dashboard side column** still renders `src/lib/mock.ts` (recent games / friends / stats snapshot). Wire it to `get_my_matches` / `get_player_stats` (and Friends once built).
 - **In-game responsive** — desktop-first; narrow widths overflow horizontally. Not designed for mobile yet.
+- **SITEMAP.md is stale** — it predates the landing redesign, real auth/rooms/lobby-realtime, Phase 5 server-authority, chat, and the Results/Profile screens. Treat CLAUDE.md's Build order table + "Where things live" as current; refresh SITEMAP.md before leaning on it.
 - Design-notes log lives at `docs/design-notes.md` once we start iterating on screens.

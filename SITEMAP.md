@@ -1,9 +1,8 @@
 # Find Vedha — Master Sitemap
 
-> **Status:** DRAFT v2 — awaiting your approval.
-> Single source of truth for every screen and state. If it is not in this document, we do not build it without adding it here first.
-> Authoritative input: Project Brief **Section 3.5 (Full End-to-End User Flow)** + the exact ruleset in Section 3.
-> Last updated: 2026-08-30 — v2 folds in the updated brief (rich Lobby with public role claim + timers; no separate Role Reveal screen).
+> ⚠️ **BEHIND THE CODE (as of 2026-09-07).** This doc is the original screen-and-state spec and is still the best statement of *intent* and the ruleset, but it predates: the landing card-ring redesign; real Supabase auth / rooms / lobby realtime (Phase 2); the authored 199-node board + map redesign (Phase 3); server-authoritative moves + RLS hidden info (Phase 5); real lobby + in-game chat with persistence (Phase 6); and the Results (`/room/[code]/results`, `/m/[id]`) and Profile (`/profile`, `/u/[username]`) screens (Phase 7).
+> **For what actually exists, see `CLAUDE.md` → "Build order" + "Where things live".** Not started: Friends, Settings, in-game disconnect/abandonment handling, most global chrome (toasts, skeletons, offline banner). Video is built but disabled (`VIDEO_ENABLED = false`).
+> Original notes: single source of truth for every screen and state; authoritative input was Project Brief §3.5 + the ruleset in §3. Last full pass 2026-08-30.
 
 ---
 
