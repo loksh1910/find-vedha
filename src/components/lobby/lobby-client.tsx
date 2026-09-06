@@ -193,13 +193,31 @@ export function LobbyClient({ code }: { code: string }) {
   const onSlotClick = useCallback((slotId: SlotId) => {
     setClaims((prev) => {
       const held = prev[slotId];
-      if (held && held !== ME) return prev;
-      const next: Partial<Record<SlotId, string>> = {};
-      for (const k of Object.keys(prev) as SlotId[]) {
-        if (prev[k] !== ME) next[k] = prev[k];
+      if (held && held !== ME) return prev; // someone else has it
+
+      // clicking a slot I already hold releases just that one
+      if (held === ME) {
+        const next = { ...prev };
+        delete next[slotId];
+        return next;
       }
-      if (held !== ME) next[slotId] = ME;
-      return next;
+
+      const mine = (Object.keys(prev) as SlotId[]).filter((k) => prev[k] === ME);
+      const iHoldVedha = mine.some((k) => slotDef(k).kind === "vedha");
+
+      if (slotDef(slotId).kind === "vedha") {
+        // Vedha is exclusive — take it, drop any Detective slots I was holding
+        const next: Partial<Record<SlotId, string>> = {};
+        for (const k of Object.keys(prev) as SlotId[]) {
+          if (prev[k] !== ME) next[k] = prev[k];
+        }
+        next[slotId] = ME;
+        return next;
+      }
+
+      // clicking a Detective slot
+      if (iHoldVedha) return prev; // the Vedha player can't also be a Detective
+      return { ...prev, [slotId]: ME }; // Detectives can be shared — add this one
     });
   }, []);
 

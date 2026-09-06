@@ -49,9 +49,9 @@ Defined as CSS custom properties on `:root` in `src/app/globals.css`, exposed to
 ### Signal (the one accent)
 | Token | Hex | Use |
 |---|---|---|
-| `--signal` | `#F5B23E` | primary CTAs, focus rings, active nav, the "Vedha signal", countdown rings |
-| `--signal-hover` | `#FFC15A` | hover on amber surfaces |
-| `--signal-ink` | `#161B22` | text/icon on an amber fill |
+| `--signal` | `#45CFE0` | primary CTAs, focus rings, active nav, the "Vedha signal", countdown rings |
+| `--signal-hover` | `#6FDDEC` | hover on the accent |
+| `--signal-ink` | `#06222A` | text/icon on an accent fill |
 
 ### Status
 | Token | Hex | Use |

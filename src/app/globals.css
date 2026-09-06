@@ -21,10 +21,10 @@
   --text-muted: #9ba8b5;
   --text-faint: #6a7683;
 
-  /* signal — the one accent (sodium-lamp amber) */
-  --signal: #f5b23e;
-  --signal-hover: #ffc15a;
-  --signal-ink: #161b22;
+  /* signal — the one accent (cyan) */
+  --signal: #45cfe0;
+  --signal-hover: #6fddec;
+  --signal-ink: #06222a;
 
   /* status */
   --ok: #57c08a;

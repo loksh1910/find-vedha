@@ -3,7 +3,6 @@
 import { Video } from "lucide-react";
 import { useMedia } from "@/components/providers/media-provider";
 import { SelfTile, PeerTile } from "@/components/media/video-tile";
-import { Button } from "@/components/ui/button";
 
 type Peer = { id: string; name: string; avatarId?: string };
 
@@ -42,27 +41,6 @@ export function LobbyVideo({ peers }: { peers: Peer[] }) {
           {peers.map((p) => (
             <PeerTile key={p.id} name={p.name} />
           ))}
-        </div>
-      )}
-
-      {!off && (
-        <div className="mt-2 flex gap-2">
-          <Button
-            variant={micOn ? "default" : "danger"}
-            size="sm"
-            className="flex-1"
-            onClick={toggleMic}
-          >
-            {micOn ? "Mic on" : "Mic off"}
-          </Button>
-          <Button
-            variant={camOn ? "default" : "danger"}
-            size="sm"
-            className="flex-1"
-            onClick={toggleCam}
-          >
-            {camOn ? "Camera on" : "Camera off"}
-          </Button>
         </div>
       )}
     </div>

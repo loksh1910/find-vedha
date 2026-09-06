@@ -19,7 +19,7 @@ export type SlotDef = {
 
 /** Hex mirrors of the design tokens — SVG/canvas only, never for DOM styling. */
 export const HEX = {
-  signal: "#f5b23e",
+  signal: "#45cfe0",
   ok: "#57c08a",
   danger: "#e5657b",
   line: "#2a2a2a",
@@ -41,7 +41,7 @@ export const VEDHA_SLOT: SlotDef = {
   id: "vedha",
   kind: "vedha",
   label: "Vedha",
-  colour: "Amber",
+  colour: "Cyan",
   varName: "--signal",
   hex: HEX.signal,
 };
@@ -63,8 +63,8 @@ export function slotDef(id: SlotId): SlotDef {
 /**
  * Fill every unclaimed slot at the end of the 10s selection window.
  * - Players holding no slot are served first (fairness).
- * - Vedha, if unclaimed, is assigned like any other slot.
- * - With < 6 players some players end up holding 2+ Detective slots.
+ * - The Vedha player only ever holds Vedha; Detective players may hold 2+
+ *   Detective slots (that's how < 6 players still cover all five).
  * `rand` lets callers pass a seeded RNG for deterministic demos/tests.
  */
 export function autoFill(
@@ -82,14 +82,42 @@ export function autoFill(
     return a;
   };
 
-  const openSlots = shuffle(ALL_SLOTS.map((s) => s.id).filter((id) => !result[id]));
+  const kindOf = (id: SlotId) => slotDef(id).kind;
+  const holds = (pid: string, kind: "vedha" | "detective") =>
+    (Object.keys(result) as SlotId[]).some(
+      (k) => result[k] === pid && kindOf(k) === kind,
+    );
   const heldCount = (pid: string) =>
     Object.values(result).filter((v) => v === pid).length;
 
-  for (const slot of openSlots) {
-    const pool = shuffle(playerIds);
-    pool.sort((a, b) => heldCount(a) - heldCount(b));
-    result[slot] = pool[0];
+  // re-scan each pass, since seating Vedha can free up Detective slots
+  for (let guard = 0; guard < 50; guard++) {
+    const open = shuffle(ALL_SLOTS.map((s) => s.id).filter((id) => !result[id]));
+    if (open.length === 0) break;
+
+    for (const slot of open) {
+      const kind = kindOf(slot);
+      // a Vedha slot can't go to someone holding a Detective, and vice versa
+      const pool = shuffle(playerIds).filter((pid) =>
+        kind === "vedha" ? !holds(pid, "detective") : !holds(pid, "vedha"),
+      );
+      if (pool.length === 0) {
+        // everyone is constrained — seat the least-loaded player and strip the
+        // claims that now conflict (they get refilled on the next pass)
+        const pick = [...shuffle(playerIds)].sort(
+          (a, b) => heldCount(a) - heldCount(b),
+        )[0];
+        for (const k of Object.keys(result) as SlotId[]) {
+          const conflicts =
+            kind === "vedha" ? kindOf(k) === "detective" : kindOf(k) === "vedha";
+          if (result[k] === pick && conflicts) delete result[k];
+        }
+        result[slot] = pick;
+        continue;
+      }
+      pool.sort((a, b) => heldCount(a) - heldCount(b));
+      result[slot] = pool[0];
+    }
   }
   return result;
 }
