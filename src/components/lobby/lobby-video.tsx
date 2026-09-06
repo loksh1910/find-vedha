@@ -1,7 +1,7 @@
 "use client";
 
 import { Video } from "lucide-react";
-import { useMedia } from "@/components/providers/media-provider";
+import { useMedia, VIDEO_ENABLED } from "@/components/providers/media-provider";
 import { SelfTile, PeerTile } from "@/components/media/video-tile";
 
 type Peer = { id: string; name: string; avatarId?: string };
@@ -22,6 +22,8 @@ export function LobbyVideo({ peers }: { peers: Peer[] }) {
   } = useMedia();
   const off = phase === "skipped" || phase === "error";
   const callOf = (id: string) => onCall.find((p) => p.id === id);
+
+  if (!VIDEO_ENABLED) return null;
 
   return (
     <div className="-mx-4 -mt-4 mb-6 flex shrink-0 items-center gap-4 border-b border-line bg-surface px-4 py-3 md:-mx-8 md:-mt-8 md:px-6">

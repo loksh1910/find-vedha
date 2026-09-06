@@ -7,6 +7,7 @@ import { TravelLog } from "./travel-log";
 import { PlayersPanel } from "./players-panel";
 import { ChatPanel } from "./chat-panel";
 import { VideoGrid } from "./video-grid";
+import { VIDEO_ENABLED } from "@/components/providers/media-provider";
 import { cn } from "@/lib/cn";
 
 const TABS = [
@@ -31,7 +32,7 @@ export function RightRail({ onClose }: { onClose: () => void }) {
     }
   }, [code]);
 
-  const showVideo = !solo && videoOn;
+  const showVideo = VIDEO_ENABLED && !solo && videoOn;
 
   return (
     <aside className="flex w-[300px] shrink-0 flex-col border-l border-line bg-surface xl:w-[360px]">
@@ -57,7 +58,7 @@ export function RightRail({ onClose }: { onClose: () => void }) {
             {t.label}
           </button>
         ))}
-        {!solo && (
+        {VIDEO_ENABLED && !solo && (
           <button
             onClick={() => setVideoOn((v) => !v)}
             aria-label={videoOn ? "Hide video" : "Show video"}

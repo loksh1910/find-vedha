@@ -12,6 +12,14 @@ import {
 import { useParams } from "next/navigation";
 import type { DailyCall, DailyParticipant } from "@daily-co/daily-js";
 
+/**
+ * Master switch for in-room video/audio. Off for now — the plumbing below
+ * (Daily call object, /api/daily/room, the tiles) stays in place; flip this
+ * to true once a media path is chosen (a card on Daily, or a raw-WebRTC
+ * rebuild). While it's false the lobby/game render with no video UI at all.
+ */
+export const VIDEO_ENABLED = false;
+
 type Phase = "choosing" | "acquiring" | "live" | "skipped" | "error";
 
 export type RemotePeer = {
@@ -136,7 +144,7 @@ export function MediaProvider({ children }: { children: ReactNode }) {
 
   const choose = useCallback(
     async ({ cam, mic }: { cam: boolean; mic: boolean }) => {
-      if (!cam && !mic) {
+      if (!VIDEO_ENABLED || (!cam && !mic)) {
         setPhase("skipped");
         setError(null);
         return;
