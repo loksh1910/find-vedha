@@ -175,6 +175,24 @@ export function LobbyClient({ code }: { code: string }) {
     }
   }, [phase, ready, players]);
 
+  /* ---- hand the final table roster to the game, so its video grid shows
+     one tile per real player (not one per pawn) ---- */
+  useEffect(() => {
+    if (phase !== "starting") return;
+    try {
+      const seats = players.map((p) => ({
+        name: p.name,
+        isMe: !!p.isMe,
+        pawns: ALL_SLOTS.filter((s) => claims[s.id] === p.id).map((s) =>
+          s.id === "vedha" ? "vedha" : `d${s.id.slice(1)}`,
+        ),
+      }));
+      sessionStorage.setItem(`fv:seats:${code}`, JSON.stringify(seats));
+    } catch {
+      /* sessionStorage unavailable — game falls back to a full table */
+    }
+  }, [phase, players, claims, code]);
+
   /* ---- countdown: 5s, cancellable by un-readying ---- */
   useEffect(() => {
     if (phase !== "countdown") return;
