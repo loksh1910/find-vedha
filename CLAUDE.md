@@ -10,7 +10,7 @@ Guidance for Claude Code (claude.ai/code) working in this repository. These inst
 
 **References:** [SITEMAP.md](SITEMAP.md) is the original screen-and-state spec — thorough on intent, but **now behind the code** (predates the landing redesign, real backend, Phase 5–7). This file's **Build order** table + **Where things live** are the current source of truth for what exists. Still add new screens/states to SITEMAP.md when the user approves them, and give it a proper refresh pass when there's time.
 
-**Current status (2026-09):** Next.js 16 + React 19 + Tailwind v4, **real Supabase backend wired** (project `kjtnzujbqrnakkkbvllj`). Phases 1–5 done, Phase 6 text chat done (video built but disabled), Phase 7 part-done. See the Build order table for per-phase status.
+**Current status (2026-09):** Next.js 16 + React 19 + Tailwind v4, **real Supabase backend wired** (project `kjtnzujbqrnakkkbvllj`). Phases 1–8 built (Phase 8 is a first pass). Left: friend **presence** (online-status + invite-to-lobby), in-game **disconnect/abandonment** handling, and **Daily video** (built but off). See the Build order table for per-phase status.
 
 - **Phases 1–4 (done):** Landing → Auth → Dashboard → Create/Join → Lobby (5-phase machine) → transition → in-game screen, on the **real 199-node Chennai board** with the real pure-function engine (24 rounds, legal moves, ticket spend + handoff, Wildcard, Double-Move, reveal rounds, win/loss).
 - **Phase 2 (done):** real Supabase auth (email/password + guest), rooms + invite codes, live Lobby over Realtime (roster / claims / ready / countdowns synced, host-driven phase machine, host migration), lobby text chat.
@@ -24,7 +24,7 @@ Guidance for Claude Code (claude.ai/code) working in this repository. These inst
 
 ## How to work on this project — process rules
 
-1. **Phase discipline (see "Build order" below).** Currently in Phase 7 (Friends left) → Phase 8. Do not jump ahead.
+1. **Phase discipline (see "Build order" below).** Phases 1–8 built. Next: the two gaps (friend presence, then in-game disconnect handling), then Daily video. Do not jump ahead.
 2. **Per-screen layout is user-driven.** Before designing or coding **any** new screen, ask the user to describe the layout, or present a rough static mockup for them to react to. Build only after they confirm. **Never invent a layout on the user's behalf.** One screen at a time. The user is a designer; walk them step-by-step through any Supabase dashboard task (SQL Editor, Auth settings) — they will say they can't find files/settings.
    - Run every visual/UI decision through [`.claude/skills/frontend-design/SKILL.md`](.claude/skills/frontend-design/SKILL.md) — see "Frontend design approach" below.
 3. **Incremental checkpoints.** Build one feature, confirm it works (`npm run dev` + the user reviews on localhost), commit, then move on. No giant untested piles of code.
@@ -156,16 +156,16 @@ The Runner's real position must be **server-authoritative** and never sent to De
 - `/room/[code]` — **the Lobby** (see its special rules below)
 - Lobby → game **transition animation** (transient, not a route)
 
-**Built (Phase 4–7):**
-- `/room/[code]/play` — In-Game (board, HUD with Manual + Leave, colour-coded ticket panel, 24-round travel log, reveal-round + stuck-pawn state, right-rail Log / Players / Chat tabs). Solo shows a view-as toggle + Auto-Detectives demo; networked play hides those. No turn timer, no deduction assist, no screen-share.
+**Built (Phase 4–8):**
+- `/room/[code]/play` — In-Game (board with wheel/drag pan-zoom + eased button-zoom + pawn-slide + node hover, HUD with Manual + Leave, colour-coded ticket panel, 24-round travel log, reveal-round + stuck-pawn state, right-rail Log / Players / Chat tabs). Synthesised SFX fire off state changes (Settings-gated). Solo shows a view-as toggle + Auto-Detectives demo; networked play hides those. No turn timer, no deduction assist, no screen-share.
 - `/room/[code]/results` and `/m/[id]` — outcome headline, Vedha's revealed route (mini diagram + ticket-tagged station list), per-player "the chase" line, reveal-round strip, Rematch / Back to lobby / Dashboard.
 - `/profile` (self) and `/u/[username]` — avatar + record header, stat band (Games / Win rate / As Vedha / As Detective), last-10 form strip; own profile also has the match-history table (rows → `/m/[id]`).
 - `/friends` — add by username, incoming requests (accept/decline), friends list (Remove), "recent players" you've been in a match with (one-click Add). Backed by `friendships` + the `*_friend*` RPCs. **No online-status pills or invite-to-lobby yet** — needs a presence/notification channel.
-- `/dashboard` side column — recent games (`get_my_matches`, split into "With friends" / "With computer" tabs by `mode`; rows open `/m/[id]`), friends (`list_friends` + an "Add friends" button → `/friends`), season stats (`get_player_stats`). No longer mock.
+- `/dashboard` side column — recent games (`get_my_matches`, split into "With friends" / "With computer" tabs by `mode`; rows open `/m/[id]`), friends (`list_friends` + an "Add friends" button → `/friends`), season stats (`get_player_stats`). Plus a dismissible first-run `IntroCard`. No longer mock.
+- `/settings` — Appearance (Motion: full/reduced/off · Board contrast) · Sound (SFX toggle + volume) · Account (avatar picker, username change, sign out). Guests get a prompt instead of account controls. Backed by `settings-provider` + `updateProfile`.
 
 **Not built yet:**
-- `/settings` — `PlaceholderScreen` (Phase 8). "Edit profile" links here.
-- **Presence / notifications** — no channel for "who's online / in a lobby / in a game", so friend status and invite-to-lobby aren't built.
+- **Presence / notifications** — no channel for "who's online / in a lobby / in a game", so friend status pills and invite-to-lobby aren't built.
 - **Disconnect / abandonment handling** during a game (spec below) — not implemented. Currently a leaver's pawn just stops; nobody can take it over; no Vedha-drop pause.
   - *Spec:* anyone can `Leave game` any time. A **Detective** leaving → pawn stays put, abandoned, blocks its node, counts as stuck. **Any remaining player can click an abandoned pawn to take it over** (keeps node + tickets). A **Vedha** drop **pauses the game** with a blocking overlay + `Exit game` CTA → **Detectives win**. Vedha pressing `Leave game` = instant Detectives win.
 - Global: toast system, per-panel skeletons, offline banner, 404/500 — mostly not built.

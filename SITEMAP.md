@@ -1,7 +1,7 @@
 # Find Vedha — Master Sitemap
 
-> ⚠️ **BEHIND THE CODE (as of 2026-09-07).** This doc is the original screen-and-state spec and is still the best statement of *intent* and the ruleset, but it predates: the landing card-ring redesign; real Supabase auth / rooms / lobby realtime (Phase 2); the authored 199-node board + map redesign (Phase 3); server-authoritative moves + RLS hidden info (Phase 5); real lobby + in-game chat with persistence (Phase 6); and the Results (`/room/[code]/results`, `/m/[id]`) and Profile (`/profile`, `/u/[username]`) screens (Phase 7).
-> **For what actually exists, see `CLAUDE.md` → "Build order" + "Where things live".** Not started: Friends, Settings, in-game disconnect/abandonment handling, most global chrome (toasts, skeletons, offline banner). Video is built but disabled (`VIDEO_ENABLED = false`).
+> ⚠️ **BEHIND THE CODE (as of 2026-09-07).** This doc is the original screen-and-state spec and is still the best statement of *intent* and the ruleset, but it predates: the landing card-ring redesign; real Supabase auth / rooms / lobby realtime (Phase 2); the authored 199-node board + map redesign (Phase 3); server-authoritative moves + RLS hidden info (Phase 5); real lobby + in-game chat with persistence (Phase 6); Results (`/room/[code]/results`, `/m/[id]`), Profile (`/profile`, `/u/[username]`) and Friends (`/friends`) (Phase 7); and Settings + sound + board motion + first-run intro (Phase 8).
+> **For what actually exists, see `CLAUDE.md` → "Build order" + "Where things live".** Not started: friend **presence** (online-status + invite-to-lobby), in-game **disconnect/abandonment** handling, most global chrome (toasts, skeletons, offline banner). Video is built but disabled (`VIDEO_ENABLED = false`).
 > Original notes: single source of truth for every screen and state; authoritative input was Project Brief §3.5 + the ruleset in §3. Last full pass 2026-08-30.
 
 ---
