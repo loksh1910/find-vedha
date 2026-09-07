@@ -105,6 +105,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [moveError, setMoveError] = useState<string | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const errTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const soloRecordedRef = useRef(false);
 
   const flashOn = useCallback((next: GameState, prevRevealRound: number | null) => {
     if (
@@ -307,6 +308,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       cancel();
       setRevealFlash(null);
       prevRevealRef.current = null;
+      soloRecordedRef.current = false;
       return;
     }
     void fetch("/api/game/start", {
@@ -341,6 +343,41 @@ export function GameProvider({ children }: { children: ReactNode }) {
     }, 650);
     return () => clearTimeout(t);
   }, [solo, autoDetectives, game]);
+
+  // solo: archive the finished game so it shows in history / the Results screen
+  useEffect(() => {
+    if (!solo || game.status.kind !== "over" || soloRecordedRef.current) return;
+    soloRecordedRef.current = true;
+    const finalState = game;
+    void (async () => {
+      const { data } = await supabase.auth.getUser();
+      const meId = data.user?.id;
+      if (!meId) return;
+      type Stashed = { id: string; name: string; isMe?: boolean; pawns: string[] };
+      let stashed: Stashed[] = [];
+      try {
+        stashed = JSON.parse(sessionStorage.getItem(`fv:seats:${code}`) ?? "[]");
+      } catch {
+        /* fall back to viewAs */
+      }
+      const mine = stashed.find((s) => s.isMe)?.pawns ?? (viewAs === "vedha" ? ["vedha"] : []);
+      const allPawns = ["vedha", "d1", "d2", "d3", "d4", "d5"];
+      const seats = [
+        { uid: meId, name: stashed.find((s) => s.isMe)?.name ?? "You", pawns: mine },
+        {
+          uid: "00000000-0000-0000-0000-000000000000",
+          name: "Computer",
+          pawns: allPawns.filter((p) => !mine.includes(p)),
+        },
+      ];
+      await supabase.rpc("record_match", {
+        p_code: code,
+        p_seed: null,
+        p_state: finalState,
+        p_seats: seats,
+      });
+    })();
+  }, [solo, game, code, viewAs, supabase]);
 
   const value: GameCtx = {
     game,

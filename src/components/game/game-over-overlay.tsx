@@ -117,14 +117,12 @@ export function GameOverOverlay() {
         </button>
 
         <div className="mt-4 flex flex-wrap justify-center gap-2">
-          {!soloTools && (
-            <Button
-              variant="primary"
-              onClick={() => router.push(`/room/${code}/results`)}
-            >
-              View results
-            </Button>
-          )}
+          <Button
+            variant={soloTools ? "default" : "primary"}
+            onClick={() => router.push(`/room/${code}/results`)}
+          >
+            View results
+          </Button>
           <Button variant={soloTools ? "primary" : "default"} onClick={newGame}>
             <RotateCcw size={14} />
             {soloTools ? "New game" : "Rematch"}

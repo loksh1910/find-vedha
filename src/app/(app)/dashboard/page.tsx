@@ -51,13 +51,14 @@ export default function DashboardPage() {
   const [recent, setRecent] = useState<RecentGame[] | null>(null);
   const [friends, setFriends] = useState<FriendRow[] | null>(null);
   const [stats, setStats] = useState<SeasonStats | null>(null);
+  const [gameTab, setGameTab] = useState<"friends" | "computer">("friends");
 
   useEffect(() => {
     if (!hydrated || !userId) return;
     let alive = true;
     (async () => {
       const [g, f, s] = await Promise.all([
-        supabase.rpc("get_my_matches", { p_limit: 6 }),
+        supabase.rpc("get_my_matches", { p_limit: 24 }),
         supabase.rpc("list_friends"),
         supabase.rpc("get_player_stats"),
       ]);
@@ -82,6 +83,10 @@ export default function DashboardPage() {
     }
     router.push(`/room/${res.room.code}`);
   }
+
+  const visibleGames = (recent ?? [])
+    .filter((g) => (gameTab === "friends" ? g.mode === "online" : g.mode === "solo"))
+    .slice(0, 8);
 
   return (
     <div className="mx-auto max-w-[980px] px-6 py-8 md:px-10">
@@ -172,9 +177,27 @@ export default function DashboardPage() {
       <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_300px]">
         <section>
           <h3 className="eyebrow mb-3">Recent games</h3>
-          {recent && recent.length === 0 ? (
+          <div className="mb-3 inline-flex rounded-md border border-line-strong p-0.5">
+            {(["friends", "computer"] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setGameTab(t)}
+                className={cn(
+                  "rounded px-3 py-1 font-mono text-xs transition-colors",
+                  gameTab === t
+                    ? "bg-surface-2 text-text"
+                    : "text-muted hover:text-text",
+                )}
+              >
+                {t === "friends" ? "With friends" : "With computer"}
+              </button>
+            ))}
+          </div>
+          {recent && visibleGames.length === 0 ? (
             <div className="rounded-lg border border-line bg-surface px-4 py-8 text-center text-sm text-muted">
-              No games yet — start one above.
+              {gameTab === "friends"
+                ? "No games with friends yet."
+                : "No games with the computer yet."}
             </div>
           ) : (
             <div className="overflow-hidden rounded-lg border border-line">
@@ -189,7 +212,7 @@ export default function DashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(recent ?? Array.from({ length: 4 })).map((g, i) =>
+                  {(recent ? visibleGames : Array.from({ length: 4 })).map((g, i) =>
                     g ? (
                       <tr
                         key={(g as RecentGame).id}
@@ -235,26 +258,10 @@ export default function DashboardPage() {
 
         <aside className="space-y-6">
           <section>
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="eyebrow">Friends</h3>
-              <Link
-                href="/friends"
-                className="inline-flex items-center gap-1 font-mono text-[0.6875rem] text-signal hover:text-signal-hover"
-              >
-                Add friends <ArrowRight size={12} />
-              </Link>
-            </div>
+            <h3 className="eyebrow mb-3">Friends</h3>
             {friends && friends.length === 0 ? (
-              <div className="rounded-lg border border-line bg-surface px-3 py-6 text-center">
-                <p className="text-sm text-muted">No friends yet.</p>
-                <Button
-                  variant="default"
-                  size="sm"
-                  className="mt-3"
-                  onClick={() => router.push("/friends")}
-                >
-                  Add friends
-                </Button>
+              <div className="rounded-lg border border-line bg-surface px-3 py-6 text-center text-sm text-muted">
+                No friends yet.
               </div>
             ) : (
               <ul className="space-y-0.5 rounded-lg border border-line bg-surface p-2">
@@ -284,6 +291,15 @@ export default function DashboardPage() {
                 )}
               </ul>
             )}
+            <Button
+              variant="default"
+              size="sm"
+              className="mt-2 w-full"
+              onClick={() => router.push("/friends")}
+            >
+              <Plus size={13} />
+              Add friends
+            </Button>
           </section>
 
           <section>

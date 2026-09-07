@@ -349,13 +349,25 @@ function Loaded({
 
       {/* actions */}
       <div className="mt-5 flex flex-wrap items-center gap-2">
-        <Button variant="primary" onClick={onRematch} disabled={busy != null}>
-          <RotateCcw size={14} />
-          {busy === "rematch" ? "Starting…" : "Rematch — same players"}
-        </Button>
-        <Button variant="default" onClick={onLobby} disabled={busy != null}>
-          Back to lobby
-        </Button>
+        {match.mode === "solo" ? (
+          <Button
+            variant="primary"
+            onClick={() => router.push("/room/SOLO?solo=1")}
+          >
+            <RotateCcw size={14} />
+            Play again
+          </Button>
+        ) : (
+          <>
+            <Button variant="primary" onClick={onRematch} disabled={busy != null}>
+              <RotateCcw size={14} />
+              {busy === "rematch" ? "Starting…" : "Rematch — same players"}
+            </Button>
+            <Button variant="default" onClick={onLobby} disabled={busy != null}>
+              Back to lobby
+            </Button>
+          </>
+        )}
         <Button variant="ghost" onClick={() => router.push("/dashboard")}>
           <LogOut size={14} />
           Dashboard
