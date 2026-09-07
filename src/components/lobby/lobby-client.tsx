@@ -220,63 +220,78 @@ export function LobbyClient({ code, solo = false }: { code: string; solo?: boole
     return () => clearInterval(iv);
   }, [phase]);
 
-  /* ---- host drives the phase machine (multiplayer) ---- */
+  /* ----------------------------------------------------------------
+     Phase machine (multiplayer). The host normally drives the timed
+     transitions; every other player is a safety net that steps in a
+     couple of seconds later, so a closed / backgrounded host tab can't
+     wedge the lobby. Advancement uses a local `setTimeout` clamped to
+     the phase's own duration — never a raw `Date.now() >= deadline`
+     against a timestamp another machine wrote, so two players' clocks
+     drifting apart can't stall it.
+  ---------------------------------------------------------------- */
+  const patchRoom = lobby.patchRoom;
+  const claimsRef = useRef(claims);
+  const playersRef = useRef(players);
   useEffect(() => {
-    if (solo || !isHost) return;
+    claimsRef.current = claims;
+    playersRef.current = players;
+  });
+  const clamp = (ms: number, lo: number, hi: number) =>
+    Math.max(lo, Math.min(hi, ms));
 
-    if (phase === "selecting" && selectDeadline) {
-      const iv = setInterval(() => {
-        if (Date.now() >= selectDeadline) {
-          clearInterval(iv);
-          void lobby.patchRoom({
-            claims: autoFill(
-              players.map((p) => p.id),
-              claims,
-            ) as Record<string, string>,
-            status: "locked",
-            select_deadline: null,
-          });
-        }
-      }, 250);
-      return () => clearInterval(iv);
-    }
+  useEffect(() => {
+    if (solo) return;
+    const backup = isHost ? 0 : 2200; // non-hosts wait a beat before driving
 
-    if (phase === "locked") {
-      const t = setTimeout(() => void lobby.patchRoom({ status: "ready" }), 1600);
+    if (phase === "selecting") {
+      const wait = clamp(selectDeadline - Date.now(), 500, SELECT_MS + 1500) + backup;
+      const t = setTimeout(() => {
+        void patchRoom({
+          claims: autoFill(
+            playersRef.current.map((p) => p.id),
+            claimsRef.current,
+          ) as Record<string, string>,
+          status: "locked",
+          select_deadline: null,
+        });
+      }, wait);
       return () => clearTimeout(t);
     }
 
-    if (
-      phase === "ready" &&
-      players.length >= 2 &&
-      players.every((p) => readyIds.includes(p.id))
-    ) {
-      void lobby.patchRoom({
+    if (phase === "locked") {
+      const t = setTimeout(() => void patchRoom({ status: "ready" }), 1400 + backup);
+      return () => clearTimeout(t);
+    }
+
+    if (phase === "countdown") {
+      const wait = clamp(deadline - Date.now(), 500, COUNTDOWN_MS + 1500) + backup;
+      const t = setTimeout(() => void patchRoom({ status: "starting" }), wait);
+      return () => clearTimeout(t);
+    }
+  }, [solo, isHost, phase, selectDeadline, deadline, patchRoom]);
+
+  /* ---- ready → countdown once everyone has readied up ---- */
+  useEffect(() => {
+    if (solo || phase !== "ready") return;
+    if (players.length >= 2 && players.every((p) => readyIds.includes(p.id))) {
+      void patchRoom({
         status: "countdown",
         start_deadline: new Date(Date.now() + COUNTDOWN_MS).toISOString(),
       });
     }
-
-    if (phase === "countdown" && deadline) {
-      const iv = setInterval(() => {
-        if (Date.now() >= deadline) {
-          clearInterval(iv);
-          void lobby.patchRoom({ status: "starting" });
-        }
-      }, 100);
-      return () => clearInterval(iv);
-    }
-  }, [solo, isHost, phase, selectDeadline, deadline, players, readyIds, claims, lobby]);
+  }, [solo, phase, players, readyIds, patchRoom]);
 
   /* ---- host migration: if the host has left, the earliest joiner takes over ---- */
   useEffect(() => {
     if (solo || !lobby.roomRow || lobby.members.length === 0) return;
-    const hostHere = lobby.members.some((m) => m.userId === lobby.roomRow!.host_id);
+    const hostHere = lobby.members.some(
+      (m) => m.userId === lobby.roomRow!.host_id,
+    );
     if (hostHere) return;
-    if (lobby.members[0].userId === userId) {
-      void lobby.patchRoom({ host_id: userId! });
+    if (lobby.members[0]?.userId === userId) {
+      void patchRoom({ host_id: userId! });
     }
-  }, [solo, lobby, userId]);
+  }, [solo, lobby.roomRow, lobby.members, patchRoom, userId]);
 
   /* ---- solo countdown clock ---- */
   useEffect(() => {
