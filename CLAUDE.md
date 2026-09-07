@@ -10,7 +10,7 @@ Guidance for Claude Code (claude.ai/code) working in this repository. These inst
 
 **References:** [SITEMAP.md](SITEMAP.md) is the original screen-and-state spec — thorough on intent, but **now behind the code** (predates the landing redesign, real backend, Phase 5–7). This file's **Build order** table + **Where things live** are the current source of truth for what exists. Still add new screens/states to SITEMAP.md when the user approves them, and give it a proper refresh pass when there's time.
 
-**Current status (2026-09):** Next.js 16 + React 19 + Tailwind v4, **real Supabase backend wired** (project `kjtnzujbqrnakkkbvllj`). Phases 1–8 built (Phase 8 is a first pass); friend **presence** + invite-to-lobby done. Left: in-game **disconnect/abandonment** handling, and **Daily video** (built but off). See the Build order table for per-phase status.
+**Current status (2026-09):** Next.js 16 + React 19 + Tailwind v4, **real Supabase backend wired** (project `kjtnzujbqrnakkkbvllj`). Phases 1–8 built (Phase 8 is a first pass); friend **presence** + invite-to-lobby done; in-game **disconnect/abandonment** handling done. **Only remaining:** Daily **video** (built, off behind `VIDEO_ENABLED`). The rest is iteration/polish. See the Build order table.
 
 - **Phases 1–4 (done):** Landing → Auth → Dashboard → Create/Join → Lobby (5-phase machine) → transition → in-game screen, on the **real 199-node Chennai board** with the real pure-function engine (24 rounds, legal moves, ticket spend + handoff, Wildcard, Double-Move, reveal rounds, win/loss).
 - **Phase 2 (done):** real Supabase auth (email/password + guest), rooms + invite codes, live Lobby over Realtime (roster / claims / ready / countdowns synced, host-driven phase machine, host migration), lobby text chat.
@@ -24,7 +24,7 @@ Guidance for Claude Code (claude.ai/code) working in this repository. These inst
 
 ## How to work on this project — process rules
 
-1. **Phase discipline (see "Build order" below).** Phases 1–8 built. Next: the two gaps (friend presence, then in-game disconnect handling), then Daily video. Do not jump ahead.
+1. **Phase discipline (see "Build order" below).** Phases 1–8 built + both gaps (presence, disconnect handling) done. Only Daily video is left; the rest is polish. Do not jump ahead.
 2. **Per-screen layout is user-driven.** Before designing or coding **any** new screen, ask the user to describe the layout, or present a rough static mockup for them to react to. Build only after they confirm. **Never invent a layout on the user's behalf.** One screen at a time. The user is a designer; walk them step-by-step through any Supabase dashboard task (SQL Editor, Auth settings) — they will say they can't find files/settings.
    - Run every visual/UI decision through [`.claude/skills/frontend-design/SKILL.md`](.claude/skills/frontend-design/SKILL.md) — see "Frontend design approach" below.
 3. **Incremental checkpoints.** Build one feature, confirm it works (`npm run dev` + the user reviews on localhost), commit, then move on. No giant untested piles of code.
@@ -121,7 +121,7 @@ The Runner's real position must be **server-authoritative** and never sent to De
 | Path | What |
 |---|---|
 | `src/app/` | routes. `(app)/` = route group with the left-rail shell + auth guard (`useAppState`). `room/[code]/` (Lobby, `play/`, `results/`) and `m/[id]/` sit **outside** the group — full-bleed, no guard. |
-| `src/app/api/game/{start,move,double,reset}/route.ts` | server-authoritative game endpoints. Auth + room-membership gate via `roomContext()`; write with the service-role client; `pingRoom()` broadcasts a contentless `game` event. `move` also archives a `matches` row on game-over. |
+| `src/app/api/game/{start,move,double,reset,leave,concede,takeover}/route.ts` | server-authoritative game endpoints. Auth + room-membership gate via `roomContext()`; write with the service-role client; `pingRoom()` broadcasts a contentless `game` event. `move` (and `leave`/`concede`) archive a `matches` row on game-over via `recordMatch()` in `lib/game/server.ts`. `leave`/`concede`/`takeover` = disconnect handling (see below). |
 | `src/app/api/daily/room/route.ts` | Daily room + meeting-token minting. Inert while `VIDEO_ENABLED = false`. |
 | `src/proxy.ts` | Next 16 middleware (renamed from `middleware.ts`) — refreshes the Supabase session cookie. Does not redirect; the `(app)` layout owns routing. |
 | `src/lib/supabase/` | `client.ts` (`createBrowserClient`), `server.ts` (`createServerClient` w/ cookies), `admin.ts` (service-role, **server only**, sole writer of `games`/`matches`). API keys are the new `sb_publishable_…` / `sb_secret_…` format. |
@@ -166,9 +166,9 @@ The Runner's real position must be **server-authoritative** and never sent to De
 - `/settings` — Appearance (Motion: full/reduced/off · Board contrast) · Sound (SFX toggle + volume) · Account (avatar picker, username change, sign out). Guests get a prompt instead of account controls. Backed by `settings-provider` + `updateProfile`.
 
 **Not built yet:**
-- **Disconnect / abandonment handling** during a game (spec below) — not implemented. Currently a leaver's pawn just stops; nobody can take it over; no Vedha-drop pause.
-  - *Spec:* anyone can `Leave game` any time. A **Detective** leaving → pawn stays put, abandoned, blocks its node, counts as stuck. **Any remaining player can click an abandoned pawn to take it over** (keeps node + tickets). A **Vedha** drop **pauses the game** with a blocking overlay + `Exit game` CTA → **Detectives win**. Vedha pressing `Leave game` = instant Detectives win.
 - Global: toast system, per-panel skeletons, offline banner, 404/500 — mostly not built.
+
+**Disconnect / abandonment (built):** a `game:<CODE>` Realtime **presence** channel in `game-provider` tracks which pawns each client holds → `awayPawns` / `vedhaAway`. `Pawn.abandoned` (engine): abandoned Detectives are skipped in the rotation and count as stuck for the Vedha-win check; `resolveAbandoned()` settles the turn when a flag flips. `/api/game/leave` — Vedha's controller ⇒ Detectives win; a Detective's controller ⇒ their pawn(s) `abandoned`. `/api/game/takeover {pawnId}` — any player claims an abandoned Detective (reassigns the seat). `/api/game/concede` — any Detective ends a game stalled by a Vedha drop. `DisconnectOverlay` (blocking, 3.5s arm delay, auto-clears on reconnect); Players panel shows an "away" badge + "Take over"; HUD "Leave game" routes through `/api/game/leave`.
 
 **No `/room/[code]/reveal` route** — role assignment happens publicly inside the Lobby, not on a separate screen.
 
@@ -205,7 +205,7 @@ Edge cases: player leaves during B/C (slot re-opens / re-fills; below 2 players 
 | **7** | Results, profiles, stats, match history, friends. | **done bar presence** — Results, Profile/stats/history, Friends (add/accept/decline/remove + recent players) all built on `matches` + `friendships`; dashboard side column wired to real data. Left: online-status + invite-to-lobby (need a presence/notification channel). |
 | **8** | Polish (dark-only): `/settings`, sound, move animations, node hover, smooth zoom, onboarding. | **done (first pass)** — `/settings` (Appearance / Sound / Account) + `settings-provider` (persists, drives `<html data-motion\|data-contrast>`); synthesised SFX (`src/lib/sound.ts` + `useSfx`); pawn-slide + eased button-zoom + node hover; dashboard `IntroCard`. Tuning (sound design, animation feel, a fuller high-contrast board) is iterative. Board already had wheel/drag pan+zoom. |
 
-**Remaining:** in-game disconnect/abandonment handling → (last) Daily video back on or a raw-WebRTC rebuild. Phase 8 polish is iterative from here (sound design, animation feel). Turn timer stays out of scope.
+**Remaining:** Daily **video** — flip `VIDEO_ENABLED` once Daily has a card, or rebuild on raw WebRTC. Everything else is iteration/polish (sound design, animation feel, dashboard/lobby chrome, global toasts). Turn timer stays out of scope.
 
 **Solo "Play with computer"** still has no real AI — only the HUD "Auto Detectives" demo toggle and a scripted `SoloChat`. Real AI Detectives are a **v2 non-goal**.
 
