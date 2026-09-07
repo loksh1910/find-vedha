@@ -22,9 +22,12 @@ function Tk({ icon, n }: { icon: ReactNode; n: number }) {
 }
 
 export function PlayersPanel() {
-  const { game, viewAs, vedhaVisible, awayPawns, takeOver, soloTools } = useGame();
+  const { game, viewAs, vedhaVisible, awayPawns, takeOver, soloTools, seats } =
+    useGame();
   const rows = ["vedha", "d1", "d2", "d3", "d4", "d5"].map((id) => game.pawns[id]);
   const playing = game.status.kind === "playing";
+  const ownerOf = (pid: string) =>
+    soloTools ? null : (seats.find((s) => s.pawns.includes(pid))?.name ?? null);
 
   return (
     <div className="flex h-full flex-col">
@@ -46,19 +49,24 @@ export function PlayersPanel() {
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 text-sm text-text">
-                  {p.label}
+                  <span className="min-w-0 flex-1 truncate">
+                    {p.label}
+                    {ownerOf(p.id) && (
+                      <span className="text-faint"> · {ownerOf(p.id)}</span>
+                    )}
+                  </span>
                   {game.turn === p.id && game.status.kind === "playing" && (
-                    <span className="font-mono text-[0.5625rem] text-game-accent">
+                    <span className="shrink-0 font-mono text-[0.5625rem] text-game-accent">
                       to move
                     </span>
                   )}
                   {p.stuck && !awayPawns.has(p.id) && (
-                    <span className="font-mono text-[0.5625rem] text-danger">
+                    <span className="shrink-0 font-mono text-[0.5625rem] text-danger">
                       stuck
                     </span>
                   )}
                   {awayPawns.has(p.id) && (
-                    <span className="font-mono text-[0.5625rem] text-faint">
+                    <span className="shrink-0 font-mono text-[0.5625rem] text-faint">
                       away
                     </span>
                   )}

@@ -356,6 +356,9 @@ export function BoardCanvas() {
                     : "transform 340ms cubic-bezier(0.2,0.6,0.2,1)",
                 }}
               >
+                {game.turn === p.id &&
+                  game.status.kind === "playing" &&
+                  !reduceMotion && <LocatorRings />}
                 <line x1={0} y1={-2} x2={0} y2={-34} stroke={`var(${p.varName})`} strokeWidth={3} />
                 <circle
                   cx={0}
@@ -392,6 +395,9 @@ export function BoardCanvas() {
                   : "transform 340ms cubic-bezier(0.2,0.6,0.2,1)",
               }}
             >
+              {game.turn === "vedha" &&
+                game.status.kind === "playing" &&
+                !reduceMotion && <LocatorRings />}
               <line x1={0} y1={-2} x2={0} y2={-36} stroke="var(--signal)" strokeWidth={3} />
               <circle cx={0} cy={-46} r={14} fill="var(--signal)" stroke="var(--reveal)" strokeWidth={3} />
               <text
@@ -445,6 +451,27 @@ export function BoardCanvas() {
         <Legend swatch="var(--t-river)" label="Wildcard" dashed />
       </div>
     </div>
+  );
+}
+
+/** cyan "you are here" rings sweeping out from the pawn whose turn it is */
+function LocatorRings() {
+  return (
+    <g aria-hidden>
+      {[0, 0.63, 1.26].map((d) => (
+        <circle
+          key={d}
+          className="fv-locate"
+          cx={0}
+          cy={0}
+          r={12}
+          fill="none"
+          stroke="var(--game-accent)"
+          strokeWidth={2}
+          style={{ animationDelay: `${d}s` }}
+        />
+      ))}
+    </g>
   );
 }
 

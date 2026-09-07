@@ -41,6 +41,8 @@ type GameCtx = {
   toggleAutoDetectives: () => void;
   /** false for a networked game (each detective is a real player) */
   soloTools: boolean;
+  /** networked: [{ uid, name, pawns }] — who controls which pawn */
+  seats: GameSeat[];
 
   /** display name for this viewer's chat messages */
   chatName: string;
@@ -517,6 +519,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     autoDetectives,
     toggleAutoDetectives,
     soloTools: solo,
+    seats,
     chatName,
     chatDet,
     chat,
