@@ -467,7 +467,7 @@ function LocatorRings() {
           r={12}
           fill="none"
           stroke="var(--game-accent)"
-          strokeWidth={2}
+          strokeWidth={2.75}
           style={{ animationDelay: `${d}s` }}
         />
       ))}
