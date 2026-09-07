@@ -262,3 +262,24 @@ body {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* app-level motion control (Settings → Appearance → Motion) */
+:root[data-motion="reduced"] *,
+:root[data-motion="reduced"] *::before,
+:root[data-motion="reduced"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 80ms !important;
+}
+:root[data-motion="off"] *,
+:root[data-motion="off"] *::before,
+:root[data-motion="off"] *::after {
+  animation: none !important;
+  transition: none !important;
+}
+
+/* board contrast (Settings → Appearance) — darker ground so routes/pieces pop */
+:root[data-contrast="high"] {
+  --game-canvas: #060709;
+  --game-water: #101f29;
+}

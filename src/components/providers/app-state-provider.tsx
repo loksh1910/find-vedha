@@ -63,6 +63,11 @@ type AppState = {
   signOut: () => Promise<void>;
   /** true when the username is free (and long enough) */
   checkUsername: (username: string) => Promise<boolean>;
+  /** edit your own profile (Settings). Pass only the fields to change. */
+  updateProfile: (patch: {
+    username?: string;
+    avatarId?: string;
+  }) => Promise<AuthResult>;
   createRoom: (name: string, maxPlayers: number) => Promise<CreateResult>;
   /** join by code — adds the caller to the room; carries the failure reason */
   joinRoom: (code: string) => Promise<JoinResult>;
@@ -187,6 +192,44 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       return !data;
     },
     [supabase],
+  );
+
+  const updateProfile = useCallback(
+    async (patch: { username?: string; avatarId?: string }): Promise<AuthResult> => {
+      if (!userId) return { error: "Sign in first." };
+      const fields: Record<string, string> = {};
+      if (patch.username != null) {
+        const u = patch.username.trim();
+        if (u.length < 3 || u.length > 16)
+          return { error: "Username must be 3–16 characters." };
+        const { data: taken } = await supabase
+          .from("profiles")
+          .select("id")
+          .ilike("username", u)
+          .maybeSingle();
+        if (taken && taken.id !== userId)
+          return { error: "That username is taken." };
+        fields.username = u;
+      }
+      if (patch.avatarId != null) fields.avatar_id = patch.avatarId;
+      if (Object.keys(fields).length === 0) return { error: null };
+
+      const { error } = await supabase
+        .from("profiles")
+        .update(fields)
+        .eq("id", userId);
+      if (error) return { error: "Couldn't save that. Try again." };
+      setProfile((p) =>
+        p
+          ? {
+              username: fields.username ?? p.username,
+              avatarId: fields.avatar_id ?? p.avatarId,
+            }
+          : p,
+      );
+      return { error: null };
+    },
+    [supabase, userId],
   );
 
   const signInWithPassword = useCallback(
@@ -344,6 +387,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       signInAsGuest,
       signOut,
       checkUsername,
+      updateProfile,
       createRoom,
       joinRoom,
       findRoom,
@@ -358,6 +402,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       signInAsGuest,
       signOut,
       checkUsername,
+      updateProfile,
       createRoom,
       joinRoom,
       findRoom,
