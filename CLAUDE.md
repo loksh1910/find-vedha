@@ -133,6 +133,10 @@ The Runner's real position must be **server-authoritative** and never sent to De
 | `src/components/results/results-screen.tsx` | Results screen — reads `get_latest_match` (from `/room/[code]/results`) or `get_match` (from `/m/[id]`). |
 | `src/components/profile/profile-screen.tsx` | Profile & stats — `profiles` row + `get_player_stats`; own profile also loads `get_my_matches`. Served at `/profile` (self) and `/u/[username]`. |
 | `src/components/friends/friends-screen.tsx` | Friends — the `*_friend*` RPCs. `/friends`. |
+| `src/components/providers/settings-provider.tsx` | `useSettings()` — sfx / sfxVol / motion / contrast, localStorage-persisted, wrapped at the **root** layout (so the game screen gets it). Reflected onto `<html data-motion\|data-contrast>`; `globals.css` acts on those. |
+| `src/components/settings/settings-screen.tsx` | `/settings`. `app-state-provider.updateProfile({username?,avatarId?})` backs the account edits. |
+| `src/lib/sound.ts` + `src/lib/use-sfx.ts` | synthesised SFX (Web Audio, no files). `game-provider` fires cues off state diffs. |
+| `src/components/shell/intro-card.tsx` | dashboard first-run panel (localStorage `fv:seen-intro`). |
 | `src/app/(app)/dashboard/page.tsx` | now loads `get_my_matches` / `list_friends` / `get_player_stats` for its side column (was `src/lib/mock.ts`). |
 | `src/lib/game/` | `types.ts` (GameState) · `engine.ts` (pure: `createGame`, `legalMoves`, `applyMove`, `declareDoubleMove`, `autoDetectiveMove`, `lastKnownVedhaNode`) · `seats.ts` (`GameSeat` = `{uid,name,pawns[]}`, `seatsFromClaims`, `controlsPawn`, `myPawns`) · `server.ts` (`import "server-only"` — `roomContext`, `pingRoom`). |
 | `src/lib/board/board-data.ts` | the authored **199-node** Chennai graph (procedural generator, `TARGET = 199`). `Board` / `BoardNode` / `BoardEdge` shape; `nodeById(id)` guards out-of-range (and the `-1` redaction sentinel) → returns `BOARD.nodes[0]`. |
@@ -199,9 +203,9 @@ Edge cases: player leaves during B/C (slot re-opens / re-fills; below 2 players 
 | **5** | Server-authoritative move sync + RLS hidden info. | **done** — API routes + `get_game` redaction; `+ /api/game/reset` returns a reusable lobby after "Exit game" |
 | **6** | Social layer: video (Daily.co) + text chat on real channels. | **text done** (lobby + in-game, live broadcast + `room_chat` persistence, DB-enforced Detectives-only scope). **Video built but OFF** (`VIDEO_ENABLED = false` — Daily needs a card; user deferred to last). |
 | **7** | Results, profiles, stats, match history, friends. | **done bar presence** — Results, Profile/stats/history, Friends (add/accept/decline/remove + recent players) all built on `matches` + `friendships`; dashboard side column wired to real data. Left: online-status + invite-to-lobby (need a presence/notification channel). |
-| **8** | Polish (dark-only): node hover states, smooth pan/zoom, sound, move/reveal/catch animations, onboarding, `/settings`. | not started (some polish landed ad-hoc: game-over review mode, transitions). |
+| **8** | Polish (dark-only): `/settings`, sound, move animations, node hover, smooth zoom, onboarding. | **done (first pass)** — `/settings` (Appearance / Sound / Account) + `settings-provider` (persists, drives `<html data-motion\|data-contrast>`); synthesised SFX (`src/lib/sound.ts` + `useSfx`); pawn-slide + eased button-zoom + node hover; dashboard `IntroCard`. Tuning (sound design, animation feel, a fuller high-contrast board) is iterative. Board already had wheel/drag pan+zoom. |
 
-**Remaining:** presence channel (friend status + invite-to-lobby) → in-game disconnect/abandonment handling → Phase 8 polish (`/settings`, sound, animations, onboarding, pan/zoom) → (last) turn Daily video back on or rebuild it on raw WebRTC. Turn timer stays out of scope.
+**Remaining:** presence channel (friend online-status + invite-to-lobby) → in-game disconnect/abandonment handling → (last) Daily video back on or a raw-WebRTC rebuild. Phase 8 polish is iterative from here (sound design, animation feel). Turn timer stays out of scope.
 
 **Solo "Play with computer"** still has no real AI — only the HUD "Auto Detectives" demo toggle and a scripted `SoloChat`. Real AI Detectives are a **v2 non-goal**.
 
