@@ -24,6 +24,7 @@ import {
 import type { GameState, MoveTransport, Role } from "@/lib/game/types";
 import { createClient } from "@/lib/supabase/client";
 import { myPawns, type GameSeat } from "@/lib/game/seats";
+import { useSfx } from "@/lib/use-sfx";
 import {
   useRoomChat,
   type ChatMsg,
@@ -92,6 +93,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   });
 
   const supabase = useMemo(() => createClient(), []);
+  const sfx = useSfx();
 
   const [game, setGame] = useState<GameState>(() => createGame(SOLO_SEED));
   const [seats, setSeats] = useState<GameSeat[]>([]);
@@ -106,6 +108,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const errTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const soloRecordedRef = useRef(false);
+  const sfxRef = useRef<{
+    turn: string;
+    round: number;
+    reveal: number | null;
+    over: boolean;
+  } | null>(null);
 
   const flashOn = useCallback((next: GameState, prevRevealRound: number | null) => {
     if (
@@ -343,6 +351,28 @@ export function GameProvider({ children }: { children: ReactNode }) {
     }, 650);
     return () => clearTimeout(t);
   }, [solo, autoDetectives, game]);
+
+  // sound cues off state transitions (gated by Settings → Sound)
+  useEffect(() => {
+    const prev = sfxRef.current;
+    const now = {
+      turn: game.turn,
+      round: game.round,
+      reveal: game.lastRevealRound,
+      over: game.status.kind === "over",
+    };
+    sfxRef.current = now;
+    if (!prev) return; // first render — don't sound the initial state
+
+    if (now.over && !prev.over) {
+      sfx(game.status.kind === "over" && game.status.winner === "detective" ? "catch" : "win");
+    } else if (now.turn !== prev.turn || now.round !== prev.round) {
+      sfx("move");
+    }
+    if (now.reveal !== prev.reveal && now.reveal != null) {
+      setTimeout(() => sfx("reveal"), 120);
+    }
+  }, [game, sfx]);
 
   // solo: archive the finished game so it shows in history / the Results screen
   useEffect(() => {
