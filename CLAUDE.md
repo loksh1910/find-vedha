@@ -16,7 +16,7 @@ Guidance for Claude Code (claude.ai/code) working in this repository. These inst
 - **Phase 2 (done):** real Supabase auth (email/password + guest), rooms + invite codes, live Lobby over Realtime (roster / claims / ready / countdowns synced, host-driven phase machine, host migration), lobby text chat.
 - **Phase 5 (done):** server-authoritative game state. Moves go through `/api/game/*` routes (service-role writer); clients read via the `get_game` RPC which **redacts Vedha's node + trail** (sentinel `-1`) for Detective viewers except on reveal rounds / at game end. The `games` table has RLS on with no policies.
 - **Phase 6 (text done, video parked):** lobby + in-game chat are real (Realtime broadcast for live delivery + `room_chat` table for history; Detectives-only scope is DB-enforced). Peer video/audio via Daily is fully built but gated off behind `VIDEO_ENABLED = false` in `media-provider.tsx` — Daily's free tier needs a card on file; user chose to defer.
-- **Phase 7 (part done):** Results screen (`/room/[code]/results`, `/m/[id]`) and Profile & stats (`/profile`, `/u/[username]`) are built and wired to a `matches` archive. Friends not started.
+- **Phase 7 (done bar presence):** Results (`/room/[code]/results`, `/m/[id]`), Profile & stats (`/profile`, `/u/[username]`), Friends (`/friends`) all built and wired to real data (`matches` archive + `friendships`). The dashboard side column is real now too (recent games / friends / season stats). Missing: online-status pills + invite-to-lobby (need a presence/notification channel).
 
 `npm run build` + `npm run lint` are kept clean.
 
@@ -125,13 +125,15 @@ The Runner's real position must be **server-authoritative** and never sent to De
 | `src/app/api/daily/room/route.ts` | Daily room + meeting-token minting. Inert while `VIDEO_ENABLED = false`. |
 | `src/proxy.ts` | Next 16 middleware (renamed from `middleware.ts`) — refreshes the Supabase session cookie. Does not redirect; the `(app)` layout owns routing. |
 | `src/lib/supabase/` | `client.ts` (`createBrowserClient`), `server.ts` (`createServerClient` w/ cookies), `admin.ts` (service-role, **server only**, sole writer of `games`/`matches`). API keys are the new `sb_publishable_…` / `sb_secret_…` format. |
-| `supabase/migrations/` | `20260906120000_phase2_auth_rooms.sql` (profiles, rooms, room_members, `is_room_member`/`is_room_host`/`room_by_code` helpers, RLS, `handle_new_user` trigger, Realtime publication) · `20260906130000_phase5_games.sql` (`games` + `get_game`) · `20260907120000_phase6_chat.sql` (`room_chat` + `is_room_detective`/`get_chat`/`post_chat`) · `20260907130000_phase7_matches.sql` (`matches` + `get_match`/`get_latest_match`/`get_my_matches`/`get_player_stats`). All idempotent; the user runs them by hand in the SQL Editor. |
+| `supabase/migrations/` | `20260906120000_phase2_auth_rooms.sql` (profiles, rooms, room_members, `is_room_member`/`is_room_host`/`room_by_code` helpers, RLS, `handle_new_user` trigger, Realtime publication) · `20260906130000_phase5_games.sql` (`games` + `get_game`) · `20260907120000_phase6_chat.sql` (`room_chat` + `is_room_detective`/`get_chat`/`post_chat`) · `20260907130000_phase7_matches.sql` (`matches` + `get_match`/`get_latest_match`/`get_my_matches`/`get_player_stats`) · `20260907140000_phase7_friends.sql` (`friendships` + `send_friend_request`/`respond_friend_request`/`remove_friend`/`list_friends`/`list_friend_requests`/`list_recent_players`). All idempotent; the user runs them by hand in the SQL Editor. |
 | `src/components/providers/app-state-provider.tsx` | real Supabase auth + rooms. `useAppState()` → `session` (`{username,avatarId}` from `profiles`), `userId`, `isGuest`, `hydrated`, `signInWithPassword`/`signUp`/`signInAsGuest`/`signOut`, `createRoom`/`joinRoom`/`findRoom`. |
 | `src/components/lobby/` | `lobby-client.tsx` (5-phase machine; multiplayer mirrors the realtime `rooms` row, host drives the phase machine + host migration) · `use-lobby-channel.ts` (per-room `postgres_changes` channel for row + roster; delegates chat to `useRoomChat`) · slot card + transition. |
 | `src/lib/realtime/use-room-chat.ts` | shared chat hook (lobby + in-game). Live delivery on `chat:<CODE>` / `chat:<CODE>:det` broadcast channels; history + durable writes via `get_chat`/`post_chat`. De-dupes by message id; auto-resubscribes. |
 | `src/components/game/` | in-game screen. `game-provider.tsx` — networked: loads via `get_game`, subscribes to the `game` ping, moves via the API routes; solo: fully local. Exposes `soloTools` (dev toggles, solo only), `chat`/`sendChat`/`chatName`/`chatDet`, `moveError`. `game-screen.tsx` assembles HUD / board / right-rail / ticket panel. `chat-panel.tsx` (`LiveChat` for MP, `SoloChat` scripted demo for solo). `game-over-overlay.tsx` (Exit game → `/api/game/reset`; multiplayer "View results"). |
 | `src/components/results/results-screen.tsx` | Results screen — reads `get_latest_match` (from `/room/[code]/results`) or `get_match` (from `/m/[id]`). |
 | `src/components/profile/profile-screen.tsx` | Profile & stats — `profiles` row + `get_player_stats`; own profile also loads `get_my_matches`. Served at `/profile` (self) and `/u/[username]`. |
+| `src/components/friends/friends-screen.tsx` | Friends — the `*_friend*` RPCs. `/friends`. |
+| `src/app/(app)/dashboard/page.tsx` | now loads `get_my_matches` / `list_friends` / `get_player_stats` for its side column (was `src/lib/mock.ts`). |
 | `src/lib/game/` | `types.ts` (GameState) · `engine.ts` (pure: `createGame`, `legalMoves`, `applyMove`, `declareDoubleMove`, `autoDetectiveMove`, `lastKnownVedhaNode`) · `seats.ts` (`GameSeat` = `{uid,name,pawns[]}`, `seatsFromClaims`, `controlsPawn`, `myPawns`) · `server.ts` (`import "server-only"` — `roomContext`, `pingRoom`). |
 | `src/lib/board/board-data.ts` | the authored **199-node** Chennai graph (procedural generator, `TARGET = 199`). `Board` / `BoardNode` / `BoardEdge` shape; `nodeById(id)` guards out-of-range (and the `-1` redaction sentinel) → returns `BOARD.nodes[0]`. |
 | `src/lib/roles.ts` | slot defs (`ALL_SLOTS`, `DETECTIVE_SLOTS`, `VEDHA_SLOT`), colours, `autoFill`. Slot ids `vedha` / `t1`…`t5`; pawn ids `vedha` / `d1`…`d5` (`t{n}` → `d{n}`). Slot CSS vars `--tr-1`…`--tr-5`. |
@@ -154,10 +156,12 @@ The Runner's real position must be **server-authoritative** and never sent to De
 - `/room/[code]/play` — In-Game (board, HUD with Manual + Leave, colour-coded ticket panel, 24-round travel log, reveal-round + stuck-pawn state, right-rail Log / Players / Chat tabs). Solo shows a view-as toggle + Auto-Detectives demo; networked play hides those. No turn timer, no deduction assist, no screen-share.
 - `/room/[code]/results` and `/m/[id]` — outcome headline, Vedha's revealed route (mini diagram + ticket-tagged station list), per-player "the chase" line, reveal-round strip, Rematch / Back to lobby / Dashboard.
 - `/profile` (self) and `/u/[username]` — avatar + record header, stat band (Games / Win rate / As Vedha / As Detective), last-10 form strip; own profile also has the match-history table (rows → `/m/[id]`).
+- `/friends` — add by username, incoming requests (accept/decline), friends list (Remove), "recent players" you've been in a match with (one-click Add). Backed by `friendships` + the `*_friend*` RPCs. **No online-status pills or invite-to-lobby yet** — needs a presence/notification channel.
+- `/dashboard` side column — recent games (`get_my_matches`), friends (`list_friends`, with an "Add friends" link to `/friends`), season stats (`get_player_stats`). No longer mock.
 
 **Not built yet:**
-- `/friends` — still a `PlaceholderScreen`. Needs a `friendships` table + screen (Phase 7 remainder).
 - `/settings` — `PlaceholderScreen` (Phase 8). "Edit profile" links here.
+- **Presence / notifications** — no channel for "who's online / in a lobby / in a game", so friend status and invite-to-lobby aren't built.
 - **Disconnect / abandonment handling** during a game (spec below) — not implemented. Currently a leaver's pawn just stops; nobody can take it over; no Vedha-drop pause.
   - *Spec:* anyone can `Leave game` any time. A **Detective** leaving → pawn stays put, abandoned, blocks its node, counts as stuck. **Any remaining player can click an abandoned pawn to take it over** (keeps node + tickets). A **Vedha** drop **pauses the game** with a blocking overlay + `Exit game` CTA → **Detectives win**. Vedha pressing `Leave game` = instant Detectives win.
 - Global: toast system, per-panel skeletons, offline banner, 404/500 — mostly not built.
@@ -194,10 +198,10 @@ Edge cases: player leaves during B/C (slot re-opens / re-fills; below 2 players 
 | **4** | In-game engine: board from data, movement + tickets + handoff, Wildcard, Double-Move, hidden-Vedha, reveal rounds, win/loss, end-game overlay. | **done** on the real board |
 | **5** | Server-authoritative move sync + RLS hidden info. | **done** — API routes + `get_game` redaction; `+ /api/game/reset` returns a reusable lobby after "Exit game" |
 | **6** | Social layer: video (Daily.co) + text chat on real channels. | **text done** (lobby + in-game, live broadcast + `room_chat` persistence, DB-enforced Detectives-only scope). **Video built but OFF** (`VIDEO_ENABLED = false` — Daily needs a card; user deferred to last). |
-| **7** | Results, profiles, stats, match history, friends. | **partial** — Results + Profile/stats/history built & wired to the `matches` archive; **Friends not started** (needs a `friendships` migration + screen). |
+| **7** | Results, profiles, stats, match history, friends. | **done bar presence** — Results, Profile/stats/history, Friends (add/accept/decline/remove + recent players) all built on `matches` + `friendships`; dashboard side column wired to real data. Left: online-status + invite-to-lobby (need a presence/notification channel). |
 | **8** | Polish (dark-only): node hover states, smooth pan/zoom, sound, move/reveal/catch animations, onboarding, `/settings`. | not started (some polish landed ad-hoc: game-over review mode, transitions). |
 
-**Remaining:** Phase 7 Friends → Phase 8 polish → (last) turn Daily video back on or rebuild it on raw WebRTC. Turn timer stays out of scope.
+**Remaining:** presence channel (friend status + invite-to-lobby) → in-game disconnect/abandonment handling → Phase 8 polish (`/settings`, sound, animations, onboarding, pan/zoom) → (last) turn Daily video back on or rebuild it on raw WebRTC. Turn timer stays out of scope.
 
 **Solo "Play with computer"** still has no real AI — only the HUD "Auto Detectives" demo toggle and a scripted `SoloChat`. Real AI Detectives are a **v2 non-goal**.
 
@@ -266,7 +270,7 @@ Run **both** `npm run build` and `npm run lint` before considering a change done
 ## Design notes / refinements to make
 
 - **Results "the chase" list** — one player holding several Detective pawns shows as a single row labelled with just the first pawn ("D1"). Fix the label (e.g. "D1–D5") or drop the per-pawn chip for multi-pawn seats.
-- **Dashboard side column** still renders `src/lib/mock.ts` (recent games / friends / stats snapshot). Wire it to `get_my_matches` / `get_player_stats` (and Friends once built).
+- **`src/lib/mock.ts`** is now unused (dashboard was wired to real RPCs). Delete it and the `MOCK_*` exports when convenient.
 - **In-game responsive** — desktop-first; narrow widths overflow horizontally. Not designed for mobile yet.
 - **SITEMAP.md is stale** — it predates the landing redesign, real auth/rooms/lobby-realtime, Phase 5 server-authority, chat, and the Results/Profile screens. Treat CLAUDE.md's Build order table + "Where things live" as current; refresh SITEMAP.md before leaning on it.
 - Design-notes log lives at `docs/design-notes.md` once we start iterating on screens.

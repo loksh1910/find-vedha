@@ -1,26 +1,75 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Plus, Circle, Bot } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, Plus, Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { SegmentedInput } from "@/components/ui/segmented-input";
 import { ComputerArt } from "@/components/game/mode-art";
 import { useAppState } from "@/components/providers/app-state-provider";
-import {
-  MOCK_FRIENDS,
-  MOCK_RECENT_GAMES,
-  MOCK_STATS,
-} from "@/lib/mock";
+import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/cn";
+
+type RecentGame = {
+  id: string;
+  endedAt: string;
+  mode: "online" | "solo";
+  rounds: number;
+  players: number;
+  myRole: "vedha" | "detective" | null;
+  result: "won" | "lost";
+};
+type FriendRow = { uid: string; username: string; avatarId: string };
+type SeasonStats = {
+  games: number;
+  wins: number;
+  vedhaGames: number;
+  vedhaWins: number;
+  detGames: number;
+  detWins: number;
+};
+
+const pctOf = (n: number, d: number) => (d > 0 ? `${Math.round((n / d) * 100)}%` : "—");
+const shortDay = (iso: string) => {
+  try {
+    return new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  } catch {
+    return iso;
+  }
+};
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { session, joinRoom } = useAppState();
+  const { session, joinRoom, userId, hydrated } = useAppState();
+  const supabase = useMemo(() => createClient(), []);
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const [recent, setRecent] = useState<RecentGame[] | null>(null);
+  const [friends, setFriends] = useState<FriendRow[] | null>(null);
+  const [stats, setStats] = useState<SeasonStats | null>(null);
+
+  useEffect(() => {
+    if (!hydrated || !userId) return;
+    let alive = true;
+    (async () => {
+      const [g, f, s] = await Promise.all([
+        supabase.rpc("get_my_matches", { p_limit: 6 }),
+        supabase.rpc("list_friends"),
+        supabase.rpc("get_player_stats"),
+      ]);
+      if (!alive) return;
+      setRecent(Array.isArray(g.data) ? (g.data as RecentGame[]) : []);
+      setFriends(Array.isArray(f.data) ? (f.data as FriendRow[]) : []);
+      if (s.data) setStats(s.data as SeasonStats);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [supabase, hydrated, userId]);
 
   async function tryJoin(value: string) {
     setError(null);
@@ -123,68 +172,136 @@ export default function DashboardPage() {
       <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_300px]">
         <section>
           <h3 className="eyebrow mb-3">Recent games</h3>
-          <div className="overflow-hidden rounded-lg border border-line">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-line text-left font-mono text-[0.6875rem] text-faint">
-                  <th className="px-4 py-2.5 font-medium">Date</th>
-                  <th className="px-4 py-2.5 font-medium">Role</th>
-                  <th className="px-4 py-2.5 font-medium">Result</th>
-                  <th className="px-4 py-2.5 font-medium text-right">Players</th>
-                  <th className="px-4 py-2.5 font-medium text-right">Rounds</th>
-                </tr>
-              </thead>
-              <tbody>
-                {MOCK_RECENT_GAMES.map((g, i) => (
-                  <tr key={i} className="border-b border-line/60 last:border-0">
-                    <td className="px-4 py-2.5 font-mono text-xs text-muted">{g.date}</td>
-                    <td className="px-4 py-2.5 text-text">{g.role}</td>
-                    <td className="px-4 py-2.5">
-                      <span
-                        className={cn(
-                          "font-mono text-xs",
-                          g.result === "Won" ? "text-ok" : "text-faint",
-                        )}
-                      >
-                        {g.result}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 text-right font-mono text-xs text-muted">{g.players}</td>
-                    <td className="px-4 py-2.5 text-right font-mono text-xs text-muted">{g.rounds}</td>
+          {recent && recent.length === 0 ? (
+            <div className="rounded-lg border border-line bg-surface px-4 py-8 text-center text-sm text-muted">
+              No games yet — start one above.
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-lg border border-line">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-line text-left font-mono text-[0.6875rem] text-faint">
+                    <th className="px-4 py-2.5 font-medium">Date</th>
+                    <th className="px-4 py-2.5 font-medium">Role</th>
+                    <th className="px-4 py-2.5 font-medium">Result</th>
+                    <th className="px-4 py-2.5 font-medium text-right">Players</th>
+                    <th className="px-4 py-2.5 font-medium text-right">Rounds</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {(recent ?? Array.from({ length: 4 })).map((g, i) =>
+                    g ? (
+                      <tr
+                        key={(g as RecentGame).id}
+                        onClick={() => router.push(`/m/${(g as RecentGame).id}`)}
+                        className="cursor-pointer border-b border-line/60 last:border-0 hover:bg-surface-2/50"
+                      >
+                        <td className="px-4 py-2.5 font-mono text-xs text-muted">
+                          {shortDay((g as RecentGame).endedAt)}
+                        </td>
+                        <td className="px-4 py-2.5 text-text">
+                          {(g as RecentGame).myRole === "vedha" ? "Vedha" : "Detective"}
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <span
+                            className={cn(
+                              "font-mono text-xs",
+                              (g as RecentGame).result === "won" ? "text-ok" : "text-faint",
+                            )}
+                          >
+                            {(g as RecentGame).result === "won" ? "Won" : "Lost"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 text-right font-mono text-xs text-muted">
+                          {(g as RecentGame).players}
+                        </td>
+                        <td className="px-4 py-2.5 text-right font-mono text-xs text-muted">
+                          {(g as RecentGame).rounds}
+                        </td>
+                      </tr>
+                    ) : (
+                      <tr key={i} className="border-b border-line/60 last:border-0">
+                        <td className="px-4 py-3.5" colSpan={5}>
+                          <span className="block h-2 w-full max-w-[220px] rounded bg-surface-2" />
+                        </td>
+                      </tr>
+                    ),
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
 
         <aside className="space-y-6">
           <section>
-            <h3 className="eyebrow mb-3">Friends</h3>
-            <ul className="space-y-1 rounded-lg border border-line bg-surface p-2">
-              {MOCK_FRIENDS.map((f) => (
-                <li key={f.name} className="flex items-center gap-3 rounded-md px-2 py-1.5">
-                  <Avatar name={f.name} size={28} />
-                  <span className="flex-1 truncate text-sm text-text">{f.name}</span>
-                  <span className="flex items-center gap-1.5 text-[0.6875rem] text-faint">
-                    <Circle
-                      size={7}
-                      className={f.online ? "fill-ok text-ok" : "fill-faint text-faint"}
-                    />
-                    {f.activity}
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="eyebrow">Friends</h3>
+              <Link
+                href="/friends"
+                className="inline-flex items-center gap-1 font-mono text-[0.6875rem] text-signal hover:text-signal-hover"
+              >
+                Add friends <ArrowRight size={12} />
+              </Link>
+            </div>
+            {friends && friends.length === 0 ? (
+              <div className="rounded-lg border border-line bg-surface px-3 py-6 text-center">
+                <p className="text-sm text-muted">No friends yet.</p>
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="mt-3"
+                  onClick={() => router.push("/friends")}
+                >
+                  Add friends
+                </Button>
+              </div>
+            ) : (
+              <ul className="space-y-0.5 rounded-lg border border-line bg-surface p-2">
+                {(friends ?? Array.from({ length: 3 })).slice(0, 8).map((f, i) =>
+                  f ? (
+                    <li key={(f as FriendRow).uid}>
+                      <Link
+                        href={`/u/${encodeURIComponent((f as FriendRow).username)}`}
+                        className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-surface-2"
+                      >
+                        <Avatar
+                          name={(f as FriendRow).username}
+                          avatarId={(f as FriendRow).avatarId}
+                          size={28}
+                        />
+                        <span className="flex-1 truncate text-sm text-text">
+                          {(f as FriendRow).username}
+                        </span>
+                      </Link>
+                    </li>
+                  ) : (
+                    <li key={i} className="flex items-center gap-3 px-2 py-1.5">
+                      <span className="h-7 w-7 shrink-0 rounded bg-surface-2" />
+                      <span className="h-2 w-24 rounded bg-surface-2" />
+                    </li>
+                  ),
+                )}
+              </ul>
+            )}
           </section>
 
           <section>
             <h3 className="eyebrow mb-3">This season</h3>
             <div className="grid grid-cols-2 gap-2">
-              <Stat label="Played" value={MOCK_STATS.played} />
-              <Stat label="Win rate" value={`${MOCK_STATS.winRatePct}%`} />
-              <Stat label="As Vedha" value={`${MOCK_STATS.asVedhaPct}%`} />
-              <Stat label="As Detective" value={`${MOCK_STATS.asDetectivePct}%`} />
+              <Stat label="Played" value={stats ? stats.games : "—"} />
+              <Stat
+                label="Win rate"
+                value={stats ? pctOf(stats.wins, stats.games) : "—"}
+              />
+              <Stat
+                label="As Vedha"
+                value={stats ? pctOf(stats.vedhaWins, stats.vedhaGames) : "—"}
+              />
+              <Stat
+                label="As Detective"
+                value={stats ? pctOf(stats.detWins, stats.detGames) : "—"}
+              />
             </div>
           </section>
         </aside>
