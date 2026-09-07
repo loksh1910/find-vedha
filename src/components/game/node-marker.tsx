@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import type { BoardNode } from "@/lib/board/board-data";
 
 /*
@@ -36,11 +39,15 @@ export function NodeMarker({
 
   const live = state === "legal" || state === "selected";
   const seg = C / segs.length;
+  const [hover, setHover] = useState(false);
+  const hot = state === "legal" && hover;
 
   return (
     <g
       transform={`translate(${node.x} ${node.y})`}
       onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
       style={{
         cursor: state === "legal" ? "pointer" : "default",
         opacity: dim && state === "idle" ? 0.42 : 1,
@@ -48,7 +55,13 @@ export function NodeMarker({
       }}
     >
       {/* the disc — drawn over the lines, so route ends are clipped cleanly */}
-      <circle r={R} fill="#161922" stroke="rgba(231,237,244,0.07)" strokeWidth={1} />
+      <circle
+        r={R}
+        fill={hot ? "#1c2a37" : "#161922"}
+        stroke="rgba(231,237,244,0.07)"
+        strokeWidth={1}
+        style={{ transition: "fill 120ms" }}
+      />
 
       {/* transport outline — 1 / 2 / 3 muted arcs around the disc */}
       {segs.length === 1 ? (
@@ -75,8 +88,9 @@ export function NodeMarker({
           r={RING_R + 4}
           fill="none"
           stroke="var(--game-accent)"
-          strokeWidth={state === "selected" ? 3.5 : 2}
-          opacity={state === "selected" ? 1 : 0.9}
+          strokeWidth={state === "selected" ? 3.5 : hot ? 2.75 : 2}
+          opacity={state === "selected" || hot ? 1 : 0.9}
+          style={{ transition: "stroke-width 120ms, opacity 120ms" }}
         />
       )}
 

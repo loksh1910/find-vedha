@@ -9,6 +9,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { SegmentedInput } from "@/components/ui/segmented-input";
 import { ComputerArt } from "@/components/game/mode-art";
 import { useAppState } from "@/components/providers/app-state-provider";
+import { IntroCard } from "@/components/shell/intro-card";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/cn";
 
@@ -90,12 +91,14 @@ export default function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-[980px] px-6 py-8 md:px-10">
-      <header className="mb-8">
+      <header className="mb-6">
         <p className="eyebrow">Dashboard</p>
         <h1 className="mt-1 font-display text-2xl font-extrabold tracking-tight text-text">
           Ready when you are, {session?.username ?? "Player"}.
         </h1>
       </header>
+
+      <IntroCard />
 
       {/* play zone */}
       <div className="grid gap-4 sm:grid-cols-2">

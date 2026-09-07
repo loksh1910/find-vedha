@@ -11,6 +11,7 @@ import {
 } from "react";
 import { Crosshair, Minus, Plus } from "lucide-react";
 import { BOARD, nodeById, roadSegments } from "@/lib/board/board-data";
+import { useSettings } from "@/components/providers/settings-provider";
 import { useGame } from "./game-provider";
 import { NodeMarker } from "./node-marker";
 import { MovePopover, type Anchor } from "./move-popover";
@@ -49,12 +50,15 @@ function clampPan(k: number, tx: number, ty: number) {
 export function BoardCanvas() {
   const { game, viewAs, vedhaVisible, lastKnown, legalDest, pending, chosenTransport, pickNode, myTurn } =
     useGame();
+  const { reduceMotion } = useSettings();
   const svgRef = useRef<SVGSVGElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [k, setK] = useState(1);
   const [tx, setTx] = useState(0);
   const [ty, setTy] = useState(0);
   const [grabbing, setGrabbing] = useState(false);
+  // true only for button zoom / fit, so those ease while wheel + drag stay 1:1
+  const [smoothView, setSmoothView] = useState(false);
   const drag = useRef<{ x: number; y: number } | null>(null);
   const moved = useRef(false);
   const [anchor, setAnchor] = useState<Anchor | null>(null);
@@ -95,6 +99,7 @@ export function BoardCanvas() {
 
   const onWheel = useCallback(
     (e: WheelEvent<SVGSVGElement>) => {
+      setSmoothView(false);
       const p = toViewBox(e.clientX, e.clientY);
       const cx = (p.x - tx) / k;
       const cy = (p.y - ty) / k;
@@ -119,6 +124,7 @@ export function BoardCanvas() {
   };
   const onPointerMove = (e: PointerEvent<SVGSVGElement>) => {
     if (!drag.current) return;
+    if (smoothView) setSmoothView(false);
     const svg = svgRef.current!;
     const s = BOARD.width / svg.getBoundingClientRect().width;
     const dx = e.clientX - drag.current.x;
@@ -133,11 +139,13 @@ export function BoardCanvas() {
     setGrabbing(false);
   };
   const fit = () => {
+    setSmoothView(!reduceMotion);
     setK(1);
     setTx(0);
     setTy(0);
   };
   const zoomBy = (factor: number) => {
+    setSmoothView(!reduceMotion);
     const next = Math.min(K_MAX, Math.max(K_MIN, k * factor));
     const clamped = clampPan(next, tx, ty);
     setK(next);
@@ -203,7 +211,14 @@ export function BoardCanvas() {
 
         <rect x={-3000} y={-3000} width={9000} height={9000} fill="#090a0e" />
 
-        <g transform={`translate(${tx} ${ty}) scale(${k})`}>
+        <g
+          transform={`translate(${tx} ${ty}) scale(${k})`}
+          style={{
+            transition: smoothView
+              ? "transform 220ms cubic-bezier(0.2,0.6,0.2,1)"
+              : "none",
+          }}
+        >
           <rect x={0} y={0} width={BOARD.width} height={BOARD.height} fill="url(#fv-ground)" />
 
           {/* water — one calm desaturated blue-grey, a barely-there shoreline */}
@@ -332,7 +347,15 @@ export function BoardCanvas() {
           {detOf.map((p) => {
             const n = nodeById(p.node);
             return (
-              <g key={p.id} transform={`translate(${n.x} ${n.y})`}>
+              <g
+                key={p.id}
+                transform={`translate(${n.x} ${n.y})`}
+                style={{
+                  transition: reduceMotion
+                    ? undefined
+                    : "transform 340ms cubic-bezier(0.2,0.6,0.2,1)",
+                }}
+              >
                 <line x1={0} y1={-2} x2={0} y2={-34} stroke={`var(${p.varName})`} strokeWidth={3} />
                 <circle
                   cx={0}
@@ -361,7 +384,14 @@ export function BoardCanvas() {
 
           {/* Vedha pin */}
           {vedhaVisible && (
-            <g transform={`translate(${nodeById(game.pawns.vedha.node).x} ${nodeById(game.pawns.vedha.node).y})`}>
+            <g
+              transform={`translate(${nodeById(game.pawns.vedha.node).x} ${nodeById(game.pawns.vedha.node).y})`}
+              style={{
+                transition: reduceMotion
+                  ? undefined
+                  : "transform 340ms cubic-bezier(0.2,0.6,0.2,1)",
+              }}
+            >
               <line x1={0} y1={-2} x2={0} y2={-36} stroke="var(--signal)" strokeWidth={3} />
               <circle cx={0} cy={-46} r={14} fill="var(--signal)" stroke="var(--reveal)" strokeWidth={3} />
               <text
