@@ -10,6 +10,7 @@ import { SegmentedInput } from "@/components/ui/segmented-input";
 import { ComputerArt } from "@/components/game/mode-art";
 import { useAppState } from "@/components/providers/app-state-provider";
 import { IntroCard } from "@/components/shell/intro-card";
+import { PresencePill } from "@/components/shell/presence-pill";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/cn";
 
@@ -280,8 +281,11 @@ export default function DashboardPage() {
                           avatarId={(f as FriendRow).avatarId}
                           size={28}
                         />
-                        <span className="flex-1 truncate text-sm text-text">
-                          {(f as FriendRow).username}
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm text-text">
+                            {(f as FriendRow).username}
+                          </span>
+                          <PresencePill uid={(f as FriendRow).uid} />
                         </span>
                       </Link>
                     </li>

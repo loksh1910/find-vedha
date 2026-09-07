@@ -3,6 +3,7 @@ import { Bricolage_Grotesque, Poppins, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import { AppStateProvider } from "@/components/providers/app-state-provider";
 import { SettingsProvider } from "@/components/providers/settings-provider";
+import { PresenceProvider } from "@/components/providers/presence-provider";
 
 const bricolage = Bricolage_Grotesque({
   subsets: ["latin"],
@@ -36,7 +37,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full">
         <SettingsProvider>
-          <AppStateProvider>{children}</AppStateProvider>
+          <AppStateProvider>
+            <PresenceProvider>{children}</PresenceProvider>
+          </AppStateProvider>
         </SettingsProvider>
       </body>
     </html>

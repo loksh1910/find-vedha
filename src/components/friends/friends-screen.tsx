@@ -12,6 +12,8 @@ import { Send, UserPlus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { useAppState } from "@/components/providers/app-state-provider";
+import { usePresence } from "@/components/providers/presence-provider";
+import { PresencePill } from "@/components/shell/presence-pill";
 import { createClient } from "@/lib/supabase/client";
 
 type Friend = { uid: string; username: string; avatarId: string; since: string | null };
@@ -209,24 +211,12 @@ export function FriendsScreen() {
         ) : (
           <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface">
             {friends.map((f) => (
-              <li key={f.uid} className="flex items-center gap-3 px-4 py-2.5">
-                <Avatar name={f.username} avatarId={f.avatarId} size={32} />
-                <Link
-                  href={`/u/${encodeURIComponent(f.username)}`}
-                  className="min-w-0 flex-1 truncate text-sm text-text hover:text-signal"
-                >
-                  {f.username}
-                </Link>
-                <button
-                  onClick={() => remove(f.uid)}
-                  disabled={busy === `rm:${f.uid}`}
-                  aria-label={`Remove ${f.username}`}
-                  className="inline-flex items-center gap-1 rounded-md px-2 py-1 font-mono text-[0.7rem] text-faint hover:bg-surface-2 hover:text-danger disabled:opacity-40"
-                >
-                  <X size={12} />
-                  Remove
-                </button>
-              </li>
+              <FriendRow
+                key={f.uid}
+                f={f}
+                busy={busy === `rm:${f.uid}`}
+                onRemove={() => remove(f.uid)}
+              />
             ))}
           </ul>
         )}
@@ -267,10 +257,61 @@ export function FriendsScreen() {
         </section>
       )}
 
-      <p className="mt-8 font-mono text-[0.7rem] text-faint">
-        Online status and invite-to-lobby need a presence channel — coming with
-        the next pass.
-      </p>
     </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+
+function FriendRow({
+  f,
+  busy,
+  onRemove,
+}: {
+  f: Friend;
+  busy: boolean;
+  onRemove: () => void;
+}) {
+  const { statusOf, myLobbyCode, invite } = usePresence();
+  const here = statusOf(f.uid);
+  const canInvite = !!myLobbyCode && here.code !== myLobbyCode;
+  const [invited, setInvited] = useState(false);
+
+  return (
+    <li className="flex items-center gap-3 px-4 py-2.5">
+      <Avatar name={f.username} avatarId={f.avatarId} size={32} />
+      <div className="min-w-0 flex-1">
+        <Link
+          href={`/u/${encodeURIComponent(f.username)}`}
+          className="block truncate text-sm text-text hover:text-signal"
+        >
+          {f.username}
+        </Link>
+        <PresencePill uid={f.uid} />
+      </div>
+      {canInvite && (
+        <Button
+          size="sm"
+          variant={invited ? "default" : "primary"}
+          disabled={invited}
+          onClick={() => {
+            invite(f.uid);
+            setInvited(true);
+            setTimeout(() => setInvited(false), 8000);
+          }}
+        >
+          {invited ? "Invited" : "Invite"}
+        </Button>
+      )}
+      <button
+        onClick={onRemove}
+        disabled={busy}
+        aria-label={`Remove ${f.username}`}
+        className="inline-flex items-center gap-1 rounded-md px-2 py-1 font-mono text-[0.7rem] text-faint hover:bg-surface-2 hover:text-danger disabled:opacity-40"
+      >
+        <X size={12} />
+        Remove
+      </button>
+    </li>
   );
 }
