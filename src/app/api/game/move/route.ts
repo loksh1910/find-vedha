@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { roomContext, pingRoom } from "@/lib/game/server";
+import { roomContext, pingRoom, recordMatch } from "@/lib/game/server";
 import { applyMove, legalMoves } from "@/lib/game/engine";
 import { controlsPawn, type GameSeat } from "@/lib/game/seats";
 import type { GameState } from "@/lib/game/types";
@@ -68,47 +68,4 @@ export async function POST(req: Request) {
   }
   await pingRoom(room.code);
   return NextResponse.json({ ok: true });
-}
-
-/** Archive a finished online game for the Results screen / history / stats. */
-async function recordMatch(
-  admin: ReturnType<typeof createAdminClient>,
-  roomId: string,
-  code: string,
-  seed: number | null,
-  state: GameState,
-  seats: GameSeat[],
-) {
-  if (state.status.kind !== "over") return;
-  const { winner, reason, round, caughtAt } = state.status;
-
-  let caughtBy: string | null = null;
-  if (typeof caughtAt === "number") {
-    const hit = Object.values(state.pawns).find(
-      (p) => p.role === "detective" && p.node === caughtAt,
-    );
-    caughtBy = hit?.id ?? null;
-  }
-  const caughtByUid =
-    (caughtBy && seats.find((s) => s.pawns.includes(caughtBy!))?.uid) || null;
-  const playerIds = [...new Set(seats.map((s) => s.uid).filter(Boolean))];
-
-  await admin.from("matches").upsert(
-    {
-      room_id: roomId,
-      code,
-      mode: "online",
-      seed,
-      winner,
-      reason,
-      rounds: round,
-      caught_at: caughtAt ?? null,
-      caught_by: caughtBy,
-      caught_by_uid: caughtByUid,
-      player_ids: playerIds,
-      state,
-      seats,
-    },
-    { onConflict: "room_id,seed", ignoreDuplicates: true },
-  );
 }

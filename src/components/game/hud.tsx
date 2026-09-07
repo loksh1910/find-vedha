@@ -1,14 +1,12 @@
 "use client";
 
 import { BookOpen, Bot, LogOut, RotateCcw, Search, VenetianMask } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { ManualDialog } from "@/components/manual/manual-dialog";
 import { useGame } from "./game-provider";
 import { nextRevealRound, isRevealRound, TOTAL_ROUNDS } from "@/lib/game/types";
 import { cn } from "@/lib/cn";
 
 export function Hud() {
-  const router = useRouter();
   const {
     game,
     viewAs,
@@ -17,6 +15,7 @@ export function Hud() {
     toggleAutoDetectives,
     newGame,
     soloTools,
+    leaveGame,
   } = useGame();
 
   const reveal = nextRevealRound(game.round);
@@ -171,7 +170,7 @@ export function Hud() {
           }
         />
         <button
-          onClick={() => router.push("/dashboard")}
+          onClick={leaveGame}
           title="Leave game"
           aria-label="Leave game"
           className="grid h-8 w-8 place-items-center rounded-md text-muted hover:bg-surface-2 hover:text-danger"

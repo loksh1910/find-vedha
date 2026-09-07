@@ -152,7 +152,7 @@ function endIf(state: GameState) {
     return true;
   }
   const allStuck = ["d1", "d2", "d3", "d4", "d5"].every(
-    (id) => state.pawns[id].stuck,
+    (id) => state.pawns[id].stuck || state.pawns[id].abandoned,
   );
   if (allStuck) {
     state.status = {
@@ -237,14 +237,14 @@ export function applyMove(prev: GameState, move: Move): GameState {
   return state;
 }
 
-/** Skip any leading stuck detectives in the current turn slot. */
+/** Skip any leading stuck / abandoned detectives in the current turn slot. */
 function advancePastStuck(state: GameState) {
   const order = ["d1", "d2", "d3", "d4", "d5"];
   let guard = 0;
   while (state.turn !== "vedha" && guard++ < 6) {
     const id = state.turn;
-    if (legalMoves(state, id).length > 0) break;
-    state.pawns[id].stuck = true;
+    if (!state.pawns[id].abandoned && legalMoves(state, id).length > 0) break;
+    if (!state.pawns[id].abandoned) state.pawns[id].stuck = true;
     const idx = order.indexOf(id);
     if (idx === order.length - 1) {
       if (state.round >= TOTAL_ROUNDS) {
@@ -262,6 +262,19 @@ function advancePastStuck(state: GameState) {
       state.turn = order[idx + 1];
     }
   }
+}
+
+/**
+ * After a pawn is marked `abandoned` (or un-abandoned on takeover), settle the
+ * turn: skip past any leading abandoned/stuck detective, and end the game if
+ * that leaves every Detective unable to act.
+ */
+export function resolveAbandoned(prev: GameState): GameState {
+  const state: GameState = structuredClone(prev);
+  if (state.status.kind !== "playing") return state;
+  if (state.turn !== "vedha") advancePastStuck(state);
+  endIf(state);
+  return state;
 }
 
 export function declareDoubleMove(prev: GameState): GameState {

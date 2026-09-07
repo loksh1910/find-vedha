@@ -364,7 +364,7 @@ export function BoardCanvas() {
                   fill={`var(${p.varName})`}
                   stroke="#dfe6ee"
                   strokeWidth={1.75}
-                  opacity={p.stuck ? 0.4 : 1}
+                  opacity={p.stuck || p.abandoned ? 0.4 : 1}
                 />
                 <text
                   x={0}

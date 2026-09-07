@@ -22,8 +22,9 @@ function Tk({ icon, n }: { icon: ReactNode; n: number }) {
 }
 
 export function PlayersPanel() {
-  const { game, viewAs, vedhaVisible } = useGame();
+  const { game, viewAs, vedhaVisible, awayPawns, takeOver, soloTools } = useGame();
   const rows = ["vedha", "d1", "d2", "d3", "d4", "d5"].map((id) => game.pawns[id]);
+  const playing = game.status.kind === "playing";
 
   return (
     <div className="flex h-full flex-col">
@@ -51,10 +52,23 @@ export function PlayersPanel() {
                       to move
                     </span>
                   )}
-                  {p.stuck && (
+                  {p.stuck && !awayPawns.has(p.id) && (
                     <span className="font-mono text-[0.5625rem] text-danger">
                       stuck
                     </span>
+                  )}
+                  {awayPawns.has(p.id) && (
+                    <span className="font-mono text-[0.5625rem] text-faint">
+                      away
+                    </span>
+                  )}
+                  {!soloTools && playing && !isVedha && awayPawns.has(p.id) && (
+                    <button
+                      onClick={() => takeOver(p.id)}
+                      className="ml-auto rounded border border-line-strong px-1.5 py-0.5 font-mono text-[0.5625rem] text-muted hover:border-signal hover:text-signal"
+                    >
+                      Take over
+                    </button>
                   )}
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">

@@ -10,7 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import {
   applyMove,
   autoDetectiveMove,
@@ -71,6 +71,18 @@ type GameCtx = {
   newGame: () => void;
   /** transient "not your turn" / network problems, networked play only */
   moveError: string | null;
+
+  /* ---- networked: disconnect / abandonment ---- */
+  /** pawn ids with no present controller (from the game presence channel) */
+  awayPawns: Set<string>;
+  /** Vedha's controller has dropped and the game is still playing */
+  vedhaAway: boolean;
+  /** claim an abandoned Detective pawn */
+  takeOver: (pawnId: string) => void;
+  /** end a stalled game because Vedha left (Detectives win) */
+  concede: () => void;
+  /** leave the game — Vedha ⇒ Detectives win, Detective ⇒ pawn abandoned */
+  leaveGame: () => void;
 };
 
 const Ctx = createContext<GameCtx | null>(null);
@@ -92,6 +104,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     }
   });
 
+  const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const sfx = useSfx();
 
@@ -183,6 +196,59 @@ export function GameProvider({ children }: { children: ReactNode }) {
     () => (solo ? null : myPawns(seats, uid)),
     [solo, seats, uid],
   );
+
+  /* ---- game presence: who's actually here ---- */
+  const [present, setPresent] = useState<Set<string>>(new Set());
+  const [presSynced, setPresSynced] = useState(false);
+  const gamePresRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const mineKey = (mine ?? []).join(",");
+
+  useEffect(() => {
+    if (solo || !uid) return;
+    const chan = supabase.channel(`game:${code}`, {
+      config: { presence: { key: uid } },
+    });
+    const sync = () => {
+      const state = chan.presenceState<{ pawns: string[] }>();
+      const here = new Set<string>();
+      for (const metas of Object.values(state)) {
+        for (const m of metas as { pawns?: string[] }[]) {
+          for (const p of m.pawns ?? []) here.add(p);
+        }
+      }
+      setPresent(here);
+      setPresSynced(true);
+    };
+    chan
+      .on("presence", { event: "sync" }, sync)
+      .subscribe((s) => {
+        if (s === "SUBSCRIBED") void chan.track({ pawns: mine ?? [] });
+      });
+    gamePresRef.current = chan;
+    return () => {
+      void supabase.removeChannel(chan);
+      gamePresRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [solo, supabase, code, uid]);
+
+  useEffect(() => {
+    const chan = gamePresRef.current;
+    if (chan) void chan.track({ pawns: mine ?? [] });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mineKey]);
+
+  const playing = game.status.kind === "playing";
+  const awayPawns = useMemo(() => {
+    const away = new Set<string>();
+    if (solo || !playing) return away;
+    for (const id of ["vedha", "d1", "d2", "d3", "d4", "d5"]) {
+      const abandoned = game.pawns[id]?.abandoned;
+      if (abandoned || (presSynced && !present.has(id))) away.add(id);
+    }
+    return away;
+  }, [solo, playing, presSynced, present, game]);
+  const vedhaAway = awayPawns.has("vedha");
 
   const chatName = useMemo(() => {
     if (solo) return viewAs === "vedha" ? "You (Vedha)" : "You (Detective)";
@@ -293,6 +359,41 @@ export function GameProvider({ children }: { children: ReactNode }) {
       }
     });
   }, [pending, chosenTransport, solo, game, code, cancel, flashOn, fetchGame, flash]);
+
+  const post = useCallback(
+    (path: string, extra: Record<string, unknown> = {}) =>
+      fetch(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, ...extra }),
+      }),
+    [code],
+  );
+
+  const takeOver = useCallback(
+    (pawnId: string) => {
+      void post("/api/game/takeover", { pawnId }).then((r) => {
+        if (r.ok) void fetchGame();
+        else flash("Couldn't take that pawn.");
+      });
+    },
+    [post, fetchGame, flash],
+  );
+
+  const concede = useCallback(() => {
+    void post("/api/game/concede").then((r) => {
+      if (r.ok) void fetchGame();
+      else flash("Couldn't end the game.");
+    });
+  }, [post, fetchGame, flash]);
+
+  const leaveGame = useCallback(() => {
+    if (solo) {
+      router.push("/dashboard");
+      return;
+    }
+    void post("/api/game/leave").finally(() => router.push("/dashboard"));
+  }, [solo, post, router]);
 
   const startDouble = useCallback(() => {
     if (!canDouble) return;
@@ -437,6 +538,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
     revealFlash,
     newGame,
     moveError,
+    awayPawns,
+    vedhaAway,
+    takeOver,
+    concede,
+    leaveGame,
   };
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

@@ -21,6 +21,9 @@ export type Pawn = {
   node: number;
   wallet: Wallet;
   stuck: boolean;
+  /** networked: controller left / dropped. Skipped in rotation, counts as
+   *  stuck for win checks, and can be taken over by any remaining player. */
+  abandoned?: boolean;
 };
 
 export type LogEntry = {
