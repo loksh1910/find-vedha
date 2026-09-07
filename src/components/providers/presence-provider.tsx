@@ -28,6 +28,14 @@ export type Invite = {
   at: number;
 };
 
+export type FriendRequest = {
+  id: string;
+  uid: string;
+  username: string;
+  avatarId: string;
+  createdAt: string;
+};
+
 type Ctx = {
   /** current status of a user by id (from the global presence channel) */
   statusOf: (uid: string) => { status: PresenceStatus; code?: string };
@@ -35,9 +43,19 @@ type Ctx = {
   myLobbyCode: string | null;
   /** send a lobby invite to a friend (only lands if the viewer is in a lobby) */
   invite: (toUid: string) => void;
+  /** invite specific users to a specific room code (used by rematch) */
+  inviteToCode: (toUids: string[], code: string) => void;
   /** inbound invites not yet acted on */
   invites: Invite[];
   dismissInvite: (id: string) => void;
+  /** inbound friend requests */
+  friendRequests: FriendRequest[];
+  refreshFriendRequests: () => void;
+  respondFriendRequest: (id: string, accept: boolean) => Promise<void>;
+  /** RPC + notify the target so their bell updates live; returns the status string */
+  sendFriendRequest: (username: string) => Promise<string>;
+  /** invites + friend requests waiting on the viewer */
+  notifCount: number;
 };
 
 const PresenceCtx = createContext<Ctx | null>(null);
@@ -59,6 +77,7 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
 
   const [peers, setPeers] = useState<Record<string, Meta[]>>({});
   const [invites, setInvites] = useState<Invite[]>([]);
+  const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
   const chanRef = useRef<RealtimeChannel | null>(null);
   const userChanRef = useRef<RealtimeChannel | null>(null);
   const meta = statusFromPath(pathname);
@@ -102,7 +121,28 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [metaKey, userId]);
 
-  // personal channel for inbound invites
+  const refreshFriendRequests = useCallback(() => {
+    if (!userId) return;
+    void (async () => {
+      try {
+        const { data } = await supabase.rpc("list_friend_requests");
+        if (Array.isArray(data)) setFriendRequests(data as FriendRequest[]);
+      } catch {
+        /* offline — the bell just shows what it last had */
+      }
+    })();
+  }, [supabase, userId]);
+
+  // load friend requests + refresh on focus
+  useEffect(() => {
+    if (!userId) return;
+    refreshFriendRequests();
+    const onFocus = () => refreshFriendRequests();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [userId, refreshFriendRequests]);
+
+  // personal channel: inbound invites + "you have a new friend request" nudges
   useEffect(() => {
     if (!userId) return;
     const chan = supabase
@@ -126,13 +166,14 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
           ].slice(-4);
         });
       })
+      .on("broadcast", { event: "notify" }, () => refreshFriendRequests())
       .subscribe();
     userChanRef.current = chan;
     return () => {
       void supabase.removeChannel(chan);
       userChanRef.current = null;
     };
-  }, [supabase, userId]);
+  }, [supabase, userId, refreshFriendRequests]);
 
   // expire invites after 90s
   useEffect(() => {
@@ -155,20 +196,34 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
 
   const myLobbyCode = meta.status === "in-lobby" ? (meta.code ?? null) : null;
 
-  const invite = useCallback(
-    (toUid: string) => {
-      if (!userId || !myLobbyCode) return;
+  const sendInviteTo = useCallback(
+    (toUid: string, code: string) => {
+      if (!userId || !code) return;
       void supabase.channel(`user:${toUid}`).send({
         type: "broadcast",
         event: "invite",
         payload: {
           fromUid: userId,
           fromName: session?.username ?? "A friend",
-          code: myLobbyCode,
+          code,
         },
       });
     },
-    [supabase, userId, session?.username, myLobbyCode],
+    [supabase, userId, session?.username],
+  );
+
+  const invite = useCallback(
+    (toUid: string) => {
+      if (myLobbyCode) sendInviteTo(toUid, myLobbyCode);
+    },
+    [myLobbyCode, sendInviteTo],
+  );
+
+  const inviteToCode = useCallback(
+    (toUids: string[], code: string) => {
+      for (const uid of toUids) if (uid && uid !== userId) sendInviteTo(uid, code);
+    },
+    [sendInviteTo, userId],
   );
 
   const dismissInvite = useCallback(
@@ -176,9 +231,73 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const respondFriendRequest = useCallback(
+    async (id: string, accept: boolean) => {
+      try {
+        await supabase.rpc("respond_friend_request", { p_id: id, p_accept: accept });
+      } catch {
+        /* keep the row; the user can retry */
+      }
+      setFriendRequests((cur) => cur.filter((r) => r.id !== id));
+    },
+    [supabase],
+  );
+
+  const sendFriendRequest = useCallback(
+    async (username: string): Promise<string> => {
+      const { data } = await supabase.rpc("send_friend_request", {
+        p_username: username,
+      });
+      const status = (data as string) ?? "error";
+      if (status === "sent" || status === "accepted") {
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("id")
+          .ilike("username", username.trim())
+          .maybeSingle();
+        if (prof?.id) {
+          void supabase.channel(`user:${prof.id}`).send({
+            type: "broadcast",
+            event: "notify",
+            payload: { kind: "friend-request" },
+          });
+        }
+        if (status === "accepted") refreshFriendRequests();
+      }
+      return status;
+    },
+    [supabase, refreshFriendRequests],
+  );
+
+  const notifCount = invites.length + friendRequests.length;
+
   const value = useMemo<Ctx>(
-    () => ({ statusOf, myLobbyCode, invite, invites, dismissInvite }),
-    [statusOf, myLobbyCode, invite, invites, dismissInvite],
+    () => ({
+      statusOf,
+      myLobbyCode,
+      invite,
+      inviteToCode,
+      invites,
+      dismissInvite,
+      friendRequests,
+      refreshFriendRequests,
+      respondFriendRequest,
+      sendFriendRequest,
+      notifCount,
+    }),
+    [
+      statusOf,
+      myLobbyCode,
+      invite,
+      inviteToCode,
+      invites,
+      dismissInvite,
+      friendRequests,
+      refreshFriendRequests,
+      respondFriendRequest,
+      sendFriendRequest,
+      notifCount,
+    ],
   );
 
   return (

@@ -11,6 +11,7 @@ import { ComputerArt } from "@/components/game/mode-art";
 import { useAppState } from "@/components/providers/app-state-provider";
 import { IntroCard } from "@/components/shell/intro-card";
 import { PresencePill } from "@/components/shell/presence-pill";
+import { NotificationBell } from "@/components/shell/notification-bell";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/cn";
 
@@ -92,11 +93,14 @@ export default function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-[980px] px-6 py-8 md:px-10">
-      <header className="mb-6">
-        <p className="eyebrow">Dashboard</p>
-        <h1 className="mt-1 font-display text-2xl font-extrabold tracking-tight text-text">
-          Ready when you are, {session?.username ?? "Player"}.
-        </h1>
+      <header className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <p className="eyebrow">Dashboard</p>
+          <h1 className="mt-1 font-display text-2xl font-extrabold tracking-tight text-text">
+            Ready when you are, {session?.username ?? "Player"}.
+          </h1>
+        </div>
+        <NotificationBell />
       </header>
 
       <IntroCard />

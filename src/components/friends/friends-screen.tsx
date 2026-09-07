@@ -17,7 +17,6 @@ import { PresencePill } from "@/components/shell/presence-pill";
 import { createClient } from "@/lib/supabase/client";
 
 type Friend = { uid: string; username: string; avatarId: string; since: string | null };
-type Request = { id: string; uid: string; username: string; avatarId: string; createdAt: string };
 type Recent = { uid: string; username: string; avatarId: string; lastPlayed: string };
 
 const ADD_RESULT: Record<string, string> = {
@@ -42,10 +41,15 @@ const ago = (iso: string) => {
 
 export function FriendsScreen() {
   const { hydrated, userId } = useAppState();
+  const {
+    friendRequests,
+    refreshFriendRequests,
+    respondFriendRequest,
+    sendFriendRequest,
+  } = usePresence();
   const supabase = useMemo(() => createClient(), []);
 
   const [friends, setFriends] = useState<Friend[]>([]);
-  const [requests, setRequests] = useState<Request[]>([]);
   const [recent, setRecent] = useState<Recent[]>([]);
   const [loading, setLoading] = useState(true);
   const [input, setInput] = useState("");
@@ -53,13 +57,11 @@ export function FriendsScreen() {
   const [busy, setBusy] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [f, r, p] = await Promise.all([
+    const [f, p] = await Promise.all([
       supabase.rpc("list_friends"),
-      supabase.rpc("list_friend_requests"),
       supabase.rpc("list_recent_players", { p_limit: 12 }),
     ]);
     if (Array.isArray(f.data)) setFriends(f.data as Friend[]);
-    if (Array.isArray(r.data)) setRequests(r.data as Request[]);
     if (Array.isArray(p.data)) setRecent(p.data as Recent[]);
     setLoading(false);
   }, [supabase]);
@@ -75,23 +77,24 @@ export function FriendsScreen() {
       const clean = name.trim();
       if (!clean) return;
       setBusy(`add:${clean}`);
-      const { data } = await supabase.rpc("send_friend_request", { p_username: clean });
+      const status = await sendFriendRequest(clean);
       setBusy(null);
-      setNote(ADD_RESULT[data as string] ?? "Couldn't send the request.");
+      setNote(ADD_RESULT[status] ?? "Couldn't send the request.");
       setInput("");
       void load();
     },
-    [supabase, load],
+    [sendFriendRequest, load],
   );
 
   const respond = useCallback(
     async (id: string, accept: boolean) => {
       setBusy(`req:${id}`);
-      await supabase.rpc("respond_friend_request", { p_id: id, p_accept: accept });
+      await respondFriendRequest(id, accept);
       setBusy(null);
       void load();
+      refreshFriendRequests();
     },
-    [supabase, load],
+    [respondFriendRequest, load, refreshFriendRequests],
   );
 
   const remove = useCallback(
@@ -155,13 +158,13 @@ export function FriendsScreen() {
       </form>
 
       {/* requests */}
-      {requests.length > 0 && (
+      {friendRequests.length > 0 && (
         <section className="mb-6">
           <p className="mb-2 font-mono text-xs text-faint">
-            Requests · {requests.length}
+            Requests · {friendRequests.length}
           </p>
           <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface">
-            {requests.map((r) => (
+            {friendRequests.map((r) => (
               <li key={r.id} className="flex items-center gap-3 px-4 py-2.5">
                 <Avatar name={r.username} avatarId={r.avatarId} size={32} />
                 <div className="min-w-0 flex-1">

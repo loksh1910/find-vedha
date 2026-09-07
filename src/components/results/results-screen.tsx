@@ -6,6 +6,7 @@ import { LogOut, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { createClient } from "@/lib/supabase/client";
+import { usePresence } from "@/components/providers/presence-provider";
 import { nodeById } from "@/lib/board/board-data";
 import { REVEAL_ROUNDS, TOTAL_ROUNDS, type GameState } from "@/lib/game/types";
 import type { GameSeat } from "@/lib/game/seats";
@@ -51,6 +52,7 @@ export function ResultsScreen() {
   const searchParams = useSearchParams();
   const matchId = routeId ?? searchParams.get("m");
 
+  const { inviteToCode } = usePresence();
   const supabase = useMemo(() => createClient(), []);
   const [match, setMatch] = useState<MatchView | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "missing">("loading");
@@ -80,16 +82,30 @@ export function ResultsScreen() {
   const code = (match?.code ?? routeCode).toUpperCase();
 
   const rematch = useCallback(async () => {
+    if (!match) return;
     setBusy("rematch");
     const res = await fetch("/api/game/start", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code, force: true }),
+      body: JSON.stringify({ code, force: true, fromMatch: match.id }),
     });
     setBusy(null);
-    if (res.ok) router.push(`/room/${code}/play`);
-    else setNote("Only the host can start a rematch.");
-  }, [code, router]);
+    if (!res.ok) {
+      const { error } = await res.json().catch(() => ({ error: "" }));
+      setNote(
+        error === "game-in-progress"
+          ? "That game is still going."
+          : "Couldn't start the rematch.",
+      );
+      return;
+    }
+    // pull the other players in
+    const others = match.seats
+      .map((s) => s.uid)
+      .filter((u) => u && u !== "00000000-0000-0000-0000-000000000000");
+    inviteToCode(others, code);
+    router.push(`/room/${code}/play`);
+  }, [match, code, router, inviteToCode]);
 
   const toLobby = useCallback(async () => {
     setBusy("lobby");
