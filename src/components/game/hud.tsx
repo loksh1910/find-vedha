@@ -1,22 +1,13 @@
 "use client";
 
-import { BookOpen, Bot, LogOut, RotateCcw, Search, VenetianMask } from "lucide-react";
+import { BookOpen, LogOut, RotateCcw } from "lucide-react";
 import { ManualDialog } from "@/components/manual/manual-dialog";
 import { useGame } from "./game-provider";
 import { nextRevealRound, isRevealRound, TOTAL_ROUNDS } from "@/lib/game/types";
 import { cn } from "@/lib/cn";
 
 export function Hud() {
-  const {
-    game,
-    viewAs,
-    setViewAs,
-    autoDetectives,
-    toggleAutoDetectives,
-    newGame,
-    soloTools,
-    leaveGame,
-  } = useGame();
+  const { game, newGame, soloTools, leaveGame } = useGame();
 
   const reveal = nextRevealRound(game.round);
   const queue = ["vedha", "d1", "d2", "d3", "d4", "d5"];
@@ -102,49 +93,7 @@ export function Hud() {
       <div className="ml-auto flex shrink-0 items-center gap-1">
         {soloTools && (
           <>
-            {/* dev aid: view-as toggle */}
-            <div className="flex overflow-hidden rounded-md border border-line-strong">
-              {(
-                [
-                  ["vedha", VenetianMask, "View as Vedha"],
-                  ["detective", Search, "View as Detectives"],
-                ] as const
-              ).map(([r, Icon, label]) => (
-                <button
-                  key={r}
-                  onClick={() => setViewAs(r)}
-                  title={label}
-                  aria-label={label}
-                  aria-pressed={viewAs === r}
-                  className={cn(
-                    "grid h-8 w-8 place-items-center transition-colors",
-                    viewAs === r
-                      ? "bg-game-accent text-game-accent-ink"
-                      : "text-muted hover:bg-surface-2 hover:text-text",
-                  )}
-                >
-                  <Icon size={15} />
-                </button>
-              ))}
-            </div>
-
-            {/* dev aid: auto-play detectives */}
-            <button
-              onClick={toggleAutoDetectives}
-              title="Auto-play Detectives (demo)"
-              aria-label="Auto-play Detectives (demo)"
-              aria-pressed={autoDetectives}
-              className={cn(
-                "grid h-8 w-8 place-items-center rounded-md border transition-colors",
-                autoDetectives
-                  ? "border-game-accent bg-game-accent/10 text-game-accent"
-                  : "border-line-strong text-muted hover:bg-surface-2 hover:text-text",
-              )}
-            >
-              <Bot size={15} />
-            </button>
-
-            {/* dev aid: new game */}
+            {/* start a fresh game against the computer */}
             <button
               onClick={newGame}
               title="New game"

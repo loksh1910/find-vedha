@@ -36,9 +36,6 @@ type Pending = { to: number; options: Move[] } | null;
 type GameCtx = {
   game: GameState;
   viewAs: Role;
-  setViewAs: (r: Role) => void;
-  autoDetectives: boolean;
-  toggleAutoDetectives: () => void;
   /** false for a networked game (each detective is a real player) */
   soloTools: boolean;
   /** networked: [{ uid, name, pawns }] — who controls which pawn */
@@ -97,14 +94,23 @@ export function GameProvider({ children }: { children: ReactNode }) {
     Array.isArray(params.code) ? params.code[0] : (params.code ?? "")
   ).toUpperCase();
 
-  const [solo] = useState(() => {
-    if (typeof window === "undefined") return false;
+  // `solo` can't be known during SSR (it lives in sessionStorage), so start
+  // false on both server and the client's first render — matching HTML, no
+  // hydration mismatch — then read it once on mount. `ready` gates the
+  // networked loader so it never fires a stray fetch for a solo room.
+  const [solo, setSolo] = useState(false);
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    let s = false;
     try {
-      return sessionStorage.getItem(`fv:solo:${code}`) === "1";
+      s = sessionStorage.getItem(`fv:solo:${code}`) === "1";
     } catch {
-      return false;
+      /* no sessionStorage — treat as networked */
     }
-  });
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time client read of a value SSR can't see
+    setSolo(s);
+    setReady(true);
+  }, [code]);
 
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -115,7 +121,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [uid, setUid] = useState<string | null>(null);
   const [controlsVedha, setControlsVedha] = useState(true);
   const [viewAs, setViewAsLocal] = useState<Role>("vedha");
-  const [autoDetectives, setAutoDetectives] = useState(false);
   const [pending, setPending] = useState<Pending>(null);
   const [chosenTransport, setChosenTransport] = useState<MoveTransport | null>(null);
   const [revealFlash, setRevealFlash] = useState<GameCtx["revealFlash"]>(null);
@@ -164,7 +169,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }, [supabase, code, flashOn]);
 
   useEffect(() => {
-    if (solo) return;
+    if (!ready || solo) return;
     let alive = true;
 
     supabase.auth.getUser().then(({ data }) => {
@@ -192,7 +197,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("focus", onFocus);
       void supabase.removeChannel(chan);
     };
-  }, [solo, supabase, code, fetchGame]);
+  }, [ready, solo, supabase, code, fetchGame]);
 
   const mine = useMemo(
     () => (solo ? null : myPawns(seats, uid)),
@@ -264,7 +269,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   const chatMe = useMemo(() => ({ name: chatName }), [chatName]);
   const { messages: chat, send: sendChat } = useRoomChat(
-    solo ? "" : code,
+    !ready || solo ? "" : code,
     chatMe,
     { det: chatDet },
   );
@@ -432,20 +437,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
     });
   }, [solo, code, cancel, fetchGame, flash]);
 
-  const toggleAutoDetectives = useCallback(
-    () => setAutoDetectives((v) => !v),
-    [],
-  );
-  const setViewAs = useCallback(
-    (r: Role) => {
-      if (solo) setViewAsLocal(r);
-    },
-    [solo],
-  );
-
-  // solo demo aid: auto-move detectives on their turn
+  // solo = play with computer: it always plays the Detectives on their turn,
+  // no toggle. The human is Vedha (viewAs stays "vedha").
   useEffect(() => {
-    if (!solo || !autoDetectives) return;
+    if (!solo) return;
     if (game.status.kind !== "playing") return;
     if (game.turn === "vedha") return;
     const t = setTimeout(() => {
@@ -453,7 +448,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       setGame((cur) => (cur !== game ? cur : m ? applyMove(cur, m) : cur));
     }, 650);
     return () => clearTimeout(t);
-  }, [solo, autoDetectives, game]);
+  }, [solo, game]);
 
   // sound cues off state transitions (gated by Settings → Sound)
   useEffect(() => {
@@ -515,9 +510,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const value: GameCtx = {
     game,
     viewAs,
-    setViewAs,
-    autoDetectives,
-    toggleAutoDetectives,
     soloTools: solo,
     seats,
     chatName,
