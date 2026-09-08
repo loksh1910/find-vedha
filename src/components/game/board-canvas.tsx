@@ -2,12 +2,12 @@
 
 import {
   useCallback,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type PointerEvent,
-  type WheelEvent,
 } from "react";
 import { Crosshair, Minus, Plus } from "lucide-react";
 import { BOARD, nodeById, roadSegments } from "@/lib/board/board-data";
@@ -63,6 +63,17 @@ export function BoardCanvas() {
   const moved = useRef(false);
   const [anchor, setAnchor] = useState<Anchor | null>(null);
 
+  // live transform — kept in sync so the once-registered native wheel listener
+  // and the multi-touch handlers always read current values without re-binding
+  const view = useRef({ k: 1, tx: 0, ty: 0 });
+  useEffect(() => {
+    view.current = { k, tx, ty };
+  }, [k, tx, ty]);
+
+  // every pointer currently on the board + the pinch gesture (two fingers)
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef<{ dist: number; k: number } | null>(null);
+
   // keep the move popover pinned to the tapped station as the board pans/zooms
   useLayoutEffect(() => {
     if (!pending || !svgRef.current || !wrapRef.current) {
@@ -97,32 +108,82 @@ export function BoardCanvas() {
     return { x: p.x, y: p.y };
   }, []);
 
-  const onWheel = useCallback(
-    (e: WheelEvent<SVGSVGElement>) => {
-      setSmoothView(false);
-      const p = toViewBox(e.clientX, e.clientY);
-      const cx = (p.x - tx) / k;
-      const cy = (p.y - ty) / k;
-      const next = Math.min(K_MAX, Math.max(K_MIN, k * (e.deltaY < 0 ? 1.15 : 1 / 1.15)));
-      const clamped = clampPan(next, p.x - cx * next, p.y - cy * next);
-      setK(next);
-      setTx(clamped.tx);
-      setTy(clamped.ty);
+  // zoom to `nextK`, keeping the board point under (clientX, clientY) fixed
+  const zoomAt = useCallback(
+    (nextK: number, clientX: number, clientY: number) => {
+      const { k: curK, tx: curTx, ty: curTy } = view.current;
+      const nk = Math.min(K_MAX, Math.max(K_MIN, nextK));
+      const p = toViewBox(clientX, clientY);
+      const bx = (p.x - curTx) / curK;
+      const by = (p.y - curTy) / curK;
+      const { tx: ntx, ty: nty } = clampPan(nk, p.x - bx * nk, p.y - by * nk);
+      view.current = { k: nk, tx: ntx, ty: nty }; // sync so bursts compound
+      setK(nk);
+      setTx(ntx);
+      setTy(nty);
     },
-    [k, tx, ty, toViewBox],
+    [toViewBox],
   );
 
+  // mouse wheel + trackpad pinch (which the browser reports as ctrl+wheel).
+  // Native and non-passive so we can preventDefault and stop the whole page
+  // zooming/scrolling when the cursor is over the board.
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      setSmoothView(false);
+      // pinch sends ctrlKey + tiny deltas; a wheel sends big discrete ticks.
+      // exp() keeps both smooth and exactly reversible.
+      const rate = e.ctrlKey ? 0.015 : 0.0022;
+      zoomAt(view.current.k * Math.exp(-e.deltaY * rate), e.clientX, e.clientY);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [zoomAt]);
+
+  const twoFinger = () => {
+    const pts = [...pointers.current.values()];
+    return {
+      dist: Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y),
+      mx: (pts[0].x + pts[1].x) / 2,
+      my: (pts[0].y + pts[1].y) / 2,
+    };
+  };
+
   const onPointerDown = (e: PointerEvent<SVGSVGElement>) => {
-    drag.current = { x: e.clientX, y: e.clientY };
-    moved.current = false;
-    setGrabbing(true);
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     try {
-      (e.target as Element).setPointerCapture?.(e.pointerId);
+      svgRef.current?.setPointerCapture(e.pointerId);
     } catch {
-      /* pointer already released */
+      /* already gone */
+    }
+    if (pointers.current.size === 2) {
+      // second finger — switch from pan to pinch-zoom
+      drag.current = null;
+      moved.current = true;
+      pinch.current = { dist: twoFinger().dist, k: view.current.k };
+    } else if (pointers.current.size === 1) {
+      drag.current = { x: e.clientX, y: e.clientY };
+      moved.current = false;
+      setGrabbing(true);
     }
   };
+
   const onPointerMove = (e: PointerEvent<SVGSVGElement>) => {
+    const p = pointers.current.get(e.pointerId);
+    if (!p) return;
+    p.x = e.clientX;
+    p.y = e.clientY;
+
+    if (pinch.current && pointers.current.size >= 2) {
+      if (smoothView) setSmoothView(false);
+      const { dist, mx, my } = twoFinger();
+      zoomAt(pinch.current.k * (dist / pinch.current.dist), mx, my);
+      return;
+    }
+
     if (!drag.current) return;
     if (smoothView) setSmoothView(false);
     const svg = svgRef.current!;
@@ -130,16 +191,31 @@ export function BoardCanvas() {
     const dx = e.clientX - drag.current.x;
     const dy = e.clientY - drag.current.y;
     if (Math.abs(dx) + Math.abs(dy) > 3) moved.current = true;
-    setTx((v) => clampPan(k, v + dx * s, 0).tx);
-    setTy((v) => clampPan(k, 0, v + dy * s).ty);
+    setTx((v) => clampPan(view.current.k, v + dx * s, 0).tx);
+    setTy((v) => clampPan(view.current.k, 0, v + dy * s).ty);
     drag.current = { x: e.clientX, y: e.clientY };
   };
-  const endDrag = () => {
-    drag.current = null;
-    setGrabbing(false);
+
+  const endPointer = (e: PointerEvent<SVGSVGElement>) => {
+    pointers.current.delete(e.pointerId);
+    try {
+      svgRef.current?.releasePointerCapture(e.pointerId);
+    } catch {
+      /* fine */
+    }
+    if (pointers.current.size < 2) pinch.current = null;
+    if (pointers.current.size === 1) {
+      // one finger left after a pinch — carry on panning from where it is
+      const [only] = [...pointers.current.values()];
+      drag.current = { x: only.x, y: only.y };
+    } else if (pointers.current.size === 0) {
+      drag.current = null;
+      setGrabbing(false);
+    }
   };
   const fit = () => {
     setSmoothView(!reduceMotion);
+    view.current = { k: 1, tx: 0, ty: 0 };
     setK(1);
     setTx(0);
     setTy(0);
@@ -148,6 +224,7 @@ export function BoardCanvas() {
     setSmoothView(!reduceMotion);
     const next = Math.min(K_MAX, Math.max(K_MIN, k * factor));
     const clamped = clampPan(next, tx, ty);
+    view.current = { k: next, tx: clamped.tx, ty: clamped.ty };
     setK(next);
     setTx(clamped.tx);
     setTy(clamped.ty);
@@ -194,11 +271,11 @@ export function BoardCanvas() {
         viewBox={`0 0 ${BOARD.width} ${BOARD.height}`}
         preserveAspectRatio="xMidYMid meet"
         className="h-full w-full touch-none select-none"
-        onWheel={onWheel}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
-        onPointerUp={endDrag}
-        onPointerLeave={endDrag}
+        onPointerUp={endPointer}
+        onPointerLeave={endPointer}
+        onPointerCancel={endPointer}
         style={{ cursor: grabbing ? "grabbing" : "grab" }}
       >
         <defs>
