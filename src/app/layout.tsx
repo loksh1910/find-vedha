@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Bricolage_Grotesque, Poppins, IBM_Plex_Mono } from "next/font/google";
+import { Bricolage_Grotesque, Poppins } from "next/font/google";
 import "./globals.css";
 import { AppStateProvider } from "@/components/providers/app-state-provider";
 import { SettingsProvider } from "@/components/providers/settings-provider";
@@ -16,12 +16,6 @@ const poppins = Poppins({
   variable: "--font-poppins",
 });
 
-const plexMono = IBM_Plex_Mono({
-  subsets: ["latin"],
-  weight: ["400", "500"],
-  variable: "--font-plex-mono",
-});
-
 export const metadata: Metadata = {
   title: "Find Vedha",
   description:
@@ -33,7 +27,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${bricolage.variable} ${poppins.variable} ${plexMono.variable} h-full`}
+      className={`${bricolage.variable} ${poppins.variable} h-full`}
     >
       <body className="min-h-full">
         <SettingsProvider>

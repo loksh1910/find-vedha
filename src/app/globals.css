@@ -104,7 +104,9 @@
 
   --font-display: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
   --font-sans: var(--font-poppins), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-plex-mono), ui-monospace, "SF Mono", Menlo, monospace;
+  /* no separate mono face — "font-mono" now just means Poppins with lined-up
+     figures (see the .font-mono rule below) */
+  --font-mono: var(--font-poppins), ui-sans-serif, system-ui, sans-serif;
 
   --radius-sm: var(--r-sm);
   --radius-md: var(--r-md);
@@ -125,7 +127,7 @@ body {
   line-height: 1.55;
 }
 
-/* the data face always uses lined-up figures */
+/* "font-mono" is kept only for its lined-up figures — same Poppins face */
 .font-mono {
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
