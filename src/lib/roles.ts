@@ -61,6 +61,31 @@ export function slotDef(id: SlotId): SlotDef {
 }
 
 /**
+ * "Let the computer decide" — a clean split, not a scatter. One player is
+ * dealt Vedha and holds nothing else; the five Detective slots are shared
+ * round-robin among *everyone else*. With two ids (solo: the player + the
+ * computer) that means one side gets Vedha and the other gets all five
+ * Detectives. `rand` lets callers pass a seeded RNG for tests.
+ */
+export function dealRoles(
+  ids: string[],
+  rand: () => number = Math.random,
+): Record<SlotId, string> {
+  const shuffled = [...ids];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  const vedhaId = shuffled[0];
+  const detIds = shuffled.slice(1).length ? shuffled.slice(1) : shuffled;
+  const result = { vedha: vedhaId } as Record<SlotId, string>;
+  DETECTIVE_SLOTS.forEach((slot, i) => {
+    result[slot.id] = detIds[i % detIds.length];
+  });
+  return result;
+}
+
+/**
  * Fill every unclaimed slot at the end of the 10s selection window.
  * - Players holding no slot are served first (fairness).
  * - The Vedha player only ever holds Vedha; Detective players may hold 2+

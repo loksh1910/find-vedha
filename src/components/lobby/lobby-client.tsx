@@ -36,6 +36,7 @@ import {
   ALL_SLOTS,
   assignmentsFor,
   autoFill,
+  dealRoles,
   slotDef,
   type SlotId,
 } from "@/lib/roles";
@@ -390,9 +391,10 @@ export function LobbyClient({ code, solo = false }: { code: string; solo?: boole
 
   function lockRoster() {
     if (autoRoles) {
-      // skip the claim window entirely — deal every role at random right now
+      // skip the claim window — one player gets Vedha, the rest split the
+      // Detectives round-robin (the Vedha player never also gets a Detective)
       void lobby.patchRoom({
-        claims: autoFill(players.map((p) => p.id), {}) as Record<string, string>,
+        claims: dealRoles(players.map((p) => p.id)) as Record<string, string>,
         status: "locked",
         select_deadline: null,
       });
@@ -424,13 +426,10 @@ export function LobbyClient({ code, solo = false }: { code: string; solo?: boole
 
   function startSolo() {
     setClaims((prev) => {
-      let base: Claims = prev;
-      // auto-assign: deal the human one random slot, the computer takes the rest
-      if (autoRoles && !(Object.values(prev) as string[]).includes(ME)) {
-        const slot = ALL_SLOTS[Math.floor(Math.random() * ALL_SLOTS.length)];
-        base = { [slot.id]: ME } as Claims;
-      }
-      const filled: Claims = { ...base };
+      // auto-assign is a coin flip: one side gets Vedha, the other gets every
+      // Detective — never a mix.
+      if (autoRoles) return dealRoles([ME, CPU]);
+      const filled: Claims = { ...prev };
       for (const s of ALL_SLOTS) if (!filled[s.id]) filled[s.id] = CPU;
       return filled;
     });
