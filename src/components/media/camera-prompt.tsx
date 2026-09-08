@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Check, Mic, Video } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { useMedia, VIDEO_ENABLED } from "@/components/providers/media-provider";
+import { useMedia, VIDEO_UI } from "@/components/providers/media-provider";
 import { cn } from "@/lib/cn";
 
 type Pick = { cam: boolean; mic: boolean };
@@ -19,7 +19,7 @@ const OPTIONS: { pick: Pick; icon: typeof Video; label: string; sub: string }[] 
 export function CameraPrompt() {
   const { answered, phase, error, choose, skip } = useMedia();
   const [pick, setPick] = useState<Pick | null>(null);
-  if (!VIDEO_ENABLED) return null;
+  if (!VIDEO_UI) return null;
   if (answered && phase !== "error") return null;
 
   const busy = phase === "acquiring";

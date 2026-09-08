@@ -267,21 +267,33 @@ function RealMediaProvider({ children }: { children: ReactNode }) {
  * plain local state so the tile buttons visibly toggle; `stream` stays null
  * (tiles fall back to a placeholder) and there are no remote `peers` (the
  * lobby / grid supply their own placeholder roster).
+ *
+ * `phase` starts at "choosing" so the camera/mic prompt shows once on lobby
+ * entry; picking an option (or skipping) just records the choice locally.
  */
 function MockMediaProvider({ children }: { children: ReactNode }) {
   const [camOn, setCamOn] = useState(true);
   const [micOn, setMicOn] = useState(true);
+  const [phase, setPhase] = useState<Phase>("choosing");
 
   const value: MediaCtx = {
     stream: null,
     camOn,
     micOn,
-    phase: "live",
-    answered: true,
+    phase,
+    answered: phase !== "choosing",
     error: null,
     peers: [],
-    choose: async () => {},
-    skip: () => {},
+    choose: async ({ cam, mic }) => {
+      setCamOn(cam);
+      setMicOn(mic);
+      setPhase("live");
+    },
+    skip: () => {
+      setCamOn(false);
+      setMicOn(false);
+      setPhase("skipped");
+    },
     toggleCam: () => setCamOn((v) => !v),
     toggleMic: () => setMicOn((v) => !v),
   };
