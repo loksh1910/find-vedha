@@ -131,10 +131,10 @@ body {
   font-feature-settings: "tnum" 1;
 }
 
-/* eyebrow / blade label */
+/* section label / kicker — plain sans, not the mono "data" face */
 .eyebrow {
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
   color: var(--text-muted);
 }
 
