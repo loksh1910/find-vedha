@@ -146,6 +146,9 @@ export function LobbyClient({ code, solo = false }: { code: string; solo?: boole
   const [chatLocal, setChatLocal] = useState<{ from: string; text: string }[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [copied, setCopied] = useState(false);
+  // host-only: when on, roles are dealt at random instead of players picking.
+  // Off by default. Host-local (it only matters at the moment roles lock in).
+  const [autoRoles, setAutoRoles] = useState(false);
 
   // mirror the realtime room row into local state
   useEffect(() => {
@@ -386,6 +389,15 @@ export function LobbyClient({ code, solo = false }: { code: string; solo?: boole
   }
 
   function lockRoster() {
+    if (autoRoles) {
+      // skip the claim window entirely — deal every role at random right now
+      void lobby.patchRoom({
+        claims: autoFill(players.map((p) => p.id), {}) as Record<string, string>,
+        status: "locked",
+        select_deadline: null,
+      });
+      return;
+    }
     void lobby.patchRoom({
       status: "selecting",
       select_deadline: new Date(Date.now() + SELECT_MS).toISOString(),
@@ -412,7 +424,13 @@ export function LobbyClient({ code, solo = false }: { code: string; solo?: boole
 
   function startSolo() {
     setClaims((prev) => {
-      const filled: Claims = { ...prev };
+      let base: Claims = prev;
+      // auto-assign: deal the human one random slot, the computer takes the rest
+      if (autoRoles && !(Object.values(prev) as string[]).includes(ME)) {
+        const slot = ALL_SLOTS[Math.floor(Math.random() * ALL_SLOTS.length)];
+        base = { [slot.id]: ME } as Claims;
+      }
+      const filled: Claims = { ...base };
       for (const s of ALL_SLOTS) if (!filled[s.id]) filled[s.id] = CPU;
       return filled;
     });
@@ -424,7 +442,7 @@ export function LobbyClient({ code, solo = false }: { code: string; solo?: boole
   const assignments = assignmentsFor(claims);
   const readyCount = players.filter((p) => readyIds.includes(p.id)).length;
   const myClaim = (Object.values(claims) as string[]).includes(myId);
-  const showBoardInteractive = phase === "selecting";
+  const showBoardInteractive = phase === "selecting" && !autoRoles;
   const showAssignments =
     phase === "locked" || phase === "ready" || phase === "countdown";
 
@@ -515,7 +533,11 @@ export function LobbyClient({ code, solo = false }: { code: string; solo?: boole
               <h1 className="mt-1 font-display text-xl font-extrabold tracking-tight text-text">
                 {phase === "roster" && "Waiting for the host to start"}
                 {phase === "selecting" &&
-                  (solo ? "Pick your side" : "Pick Vedha or a Detective")}
+                  (autoRoles
+                    ? "The computer deals the roles"
+                    : solo
+                      ? "Pick your side"
+                      : "Pick Vedha or a Detective")}
                 {phase === "locked" && "Here's who's who"}
                 {phase === "ready" && "Mark ready when you are"}
                 {phase === "countdown" &&
@@ -641,8 +663,8 @@ export function LobbyClient({ code, solo = false }: { code: string; solo?: boole
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col p-4">
-            <h2 className="eyebrow mb-3">Lobby chat</h2>
-            <ul className="flex-1 space-y-2 overflow-y-auto text-sm" style={{ maxHeight: 220 }}>
+            <h2 className="eyebrow mb-3 shrink-0">Lobby chat</h2>
+            <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto text-sm">
               {chat.length === 0 && (
                 <li className="text-xs text-faint">No messages yet.</li>
               )}
@@ -653,7 +675,7 @@ export function LobbyClient({ code, solo = false }: { code: string; solo?: boole
                 </li>
               ))}
             </ul>
-            <form onSubmit={sendChat} className="mt-3 flex gap-2">
+            <form onSubmit={sendChat} className="mt-3 flex shrink-0 gap-2">
               <input
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
@@ -698,13 +720,23 @@ export function LobbyClient({ code, solo = false }: { code: string; solo?: boole
                 <Switch checked={false} disabled aria-label="Fill empty slots with AI (coming soon)" />
                 <span className="font-mono text-[0.625rem] text-faint">soon</span>
               </div>
+              <label className="flex items-center gap-2">
+                <span className="text-sm text-muted">Computer assigns roles</span>
+                <Switch
+                  checked={autoRoles}
+                  onCheckedChange={setAutoRoles}
+                  aria-label="Let the computer assign roles at random"
+                />
+              </label>
               <Button
                 variant="primary"
                 className="ml-auto"
                 onClick={lockRoster}
                 disabled={players.length < 2 || !roomReady}
               >
-                Lock roster &amp; start role selection
+                {autoRoles
+                  ? "Deal roles & continue"
+                  : "Lock roster & start role selection"}
               </Button>
             </div>
           ) : (
@@ -721,15 +753,31 @@ export function LobbyClient({ code, solo = false }: { code: string; solo?: boole
         )}
 
         {phase === "selecting" && solo && (
-          <div className="flex items-center justify-between gap-4">
-            <span className="text-sm text-muted">
-              {myClaim
-                ? "Locked in — the computer plays every other role."
-                : "Tap Vedha or a Detective slot to choose your side."}
-            </span>
-            <Button variant="primary" disabled={!myClaim} onClick={startSolo}>
-              Ready — start game
-            </Button>
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+            <label className="flex items-center gap-2">
+              <Switch
+                checked={autoRoles}
+                onCheckedChange={setAutoRoles}
+                aria-label="Let the computer pick my side"
+              />
+              <span className="text-sm text-muted">Let the computer pick my side</span>
+            </label>
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-muted">
+                {autoRoles
+                  ? "The computer deals you a side at random."
+                  : myClaim
+                    ? "Locked in — the computer plays every other role."
+                    : "Tap Vedha or a Detective slot to choose your side."}
+              </span>
+              <Button
+                variant="primary"
+                disabled={!myClaim && !autoRoles}
+                onClick={startSolo}
+              >
+                Ready — start game
+              </Button>
+            </div>
           </div>
         )}
 
