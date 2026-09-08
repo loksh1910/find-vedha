@@ -13,12 +13,23 @@ import { useParams } from "next/navigation";
 import type { DailyCall, DailyParticipant } from "@daily-co/daily-js";
 
 /**
- * Master switch for in-room video/audio. Off for now — the plumbing below
- * (Daily call object, /api/daily/room, the tiles) stays in place; flip this
- * to true once a media path is chosen (a card on Daily, or a raw-WebRTC
- * rebuild). While it's false the lobby/game render with no video UI at all.
+ * Master switch for REAL in-room video/audio (Daily call object,
+ * /api/daily/room, live camera + mic). Off until a media path is paid for /
+ * chosen.
  */
 export const VIDEO_ENABLED = false;
+
+/**
+ * Portfolio mock. Renders the entire video UI — the lobby's horizontal table
+ * strip and the in-game right-rail panel — with placeholder tiles and
+ * *working* mic / camera buttons, but no real media at all: no getUserMedia,
+ * no Daily, no network. Toggling a button just flips its own icon + colour.
+ * Ignored when VIDEO_ENABLED is true (real calls take over).
+ */
+export const VIDEO_MOCK = true;
+
+/** Should the video UI render at all — real or mocked. */
+export const VIDEO_UI = VIDEO_ENABLED || VIDEO_MOCK;
 
 type Phase = "choosing" | "acquiring" | "live" | "skipped" | "error";
 
@@ -60,7 +71,8 @@ function trackOf(
   return t?.state === "playable" && t.persistentTrack ? t.persistentTrack : null;
 }
 
-export function MediaProvider({ children }: { children: ReactNode }) {
+/** Real Daily-backed provider. Only mounted when VIDEO_ENABLED is true. */
+function RealMediaProvider({ children }: { children: ReactNode }) {
   const params = useParams<{ code: string }>();
   const code = (
     Array.isArray(params.code) ? params.code[0] : (params.code ?? "")
@@ -248,6 +260,41 @@ export function MediaProvider({ children }: { children: ReactNode }) {
   };
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+/**
+ * Mock provider — no devices, no Daily, no network. `camOn` / `micOn` are
+ * plain local state so the tile buttons visibly toggle; `stream` stays null
+ * (tiles fall back to a placeholder) and there are no remote `peers` (the
+ * lobby / grid supply their own placeholder roster).
+ */
+function MockMediaProvider({ children }: { children: ReactNode }) {
+  const [camOn, setCamOn] = useState(true);
+  const [micOn, setMicOn] = useState(true);
+
+  const value: MediaCtx = {
+    stream: null,
+    camOn,
+    micOn,
+    phase: "live",
+    answered: true,
+    error: null,
+    peers: [],
+    choose: async () => {},
+    skip: () => {},
+    toggleCam: () => setCamOn((v) => !v),
+    toggleMic: () => setMicOn((v) => !v),
+  };
+
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+export function MediaProvider({ children }: { children: ReactNode }) {
+  return VIDEO_ENABLED ? (
+    <RealMediaProvider>{children}</RealMediaProvider>
+  ) : (
+    <MockMediaProvider>{children}</MockMediaProvider>
+  );
 }
 
 export function useMedia(): MediaCtx {

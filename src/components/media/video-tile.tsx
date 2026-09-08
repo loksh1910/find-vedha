@@ -10,7 +10,25 @@ type Common = {
   colorVar?: string;
   speaking?: boolean;
   className?: string;
+  /** portfolio mock: no real stream — show a placeholder "feed" when camOn */
+  mock?: boolean;
 };
+
+/** deterministic gradient stand-in for a camera feed (mock only) */
+function MockFeed({ name }: { name: string }) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0;
+  const a = Math.abs(h) % 360;
+  const b = (a + 42) % 360;
+  return (
+    <div
+      className="absolute inset-0"
+      style={{
+        background: `linear-gradient(140deg, hsl(${a} 30% 24%), hsl(${b} 28% 13%))`,
+      }}
+    />
+  );
+}
 
 /** A peer's tile — live feed if they're on the call, avatar otherwise. */
 export function PeerTile({
@@ -20,6 +38,7 @@ export function PeerTile({
   micOn = true,
   camOn = false,
   stream = null,
+  mock = false,
   className,
 }: Common & {
   micOn?: boolean;
@@ -35,8 +54,11 @@ export function PeerTile({
     if (stream) el.play().catch(() => {});
   }, [stream]);
 
+  const feed = mock && camOn && !stream;
+
   return (
     <Frame colorVar={colorVar} speaking={speaking} className={className}>
+      {feed && <MockFeed name={name} />}
       {stream && (
         <video
           ref={videoRef}
@@ -48,13 +70,18 @@ export function PeerTile({
           )}
         />
       )}
-      {!camOn && (
+      {!camOn && !feed && (
         <>
           <Avatar name={name} size={26} />
           <span className="mt-1 text-[0.625rem] text-muted">{name}</span>
         </>
       )}
-      <Badges micOn={micOn} camOn={camOn} muted={!stream} />
+      {feed && (
+        <span className="absolute bottom-1 left-1.5 text-[0.625rem] font-medium text-white/85">
+          {name}
+        </span>
+      )}
+      <Badges micOn={micOn} camOn={camOn} muted={!stream && !mock} />
     </Frame>
   );
 }
@@ -69,6 +96,7 @@ export function SelfTile({
   micOn,
   onToggleCam,
   onToggleMic,
+  mock = false,
   className,
 }: Common & {
   stream: MediaStream | null;
@@ -86,19 +114,24 @@ export function SelfTile({
     if (stream) el.play().catch(() => {});
   }, [stream]);
 
+  const feed = mock && camOn && !stream;
+
   return (
     <Frame colorVar={colorVar} speaking={speaking} className={className}>
-      <video
-        ref={videoRef}
-        autoPlay
-        muted
-        playsInline
-        className={cn(
-          "absolute inset-0 h-full w-full -scale-x-100 object-cover",
-          camOn ? "opacity-100" : "opacity-0",
-        )}
-      />
-      {!camOn && (
+      {feed && <MockFeed name={name} />}
+      {!mock && (
+        <video
+          ref={videoRef}
+          autoPlay
+          muted
+          playsInline
+          className={cn(
+            "absolute inset-0 h-full w-full -scale-x-100 object-cover",
+            camOn ? "opacity-100" : "opacity-0",
+          )}
+        />
+      )}
+      {!camOn && !feed && (
         <>
           <Avatar name={name} size={26} />
           <span className="mt-1 text-[0.625rem] text-muted">{name}</span>

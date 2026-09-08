@@ -7,7 +7,7 @@ import { TravelLog } from "./travel-log";
 import { PlayersPanel } from "./players-panel";
 import { ChatPanel } from "./chat-panel";
 import { VideoGrid } from "./video-grid";
-import { VIDEO_ENABLED } from "@/components/providers/media-provider";
+import { VIDEO_UI } from "@/components/providers/media-provider";
 import { cn } from "@/lib/cn";
 
 const TABS = [
@@ -22,17 +22,22 @@ export function RightRail({ onClose }: { onClose: () => void }) {
 
   const params = useParams<{ code: string }>();
   const code = (Array.isArray(params.code) ? params.code[0] : params.code ?? "").toUpperCase();
-  const [solo, setSolo] = useState(false);
+  // start unknown so the video panel never flashes in a solo game before the
+  // flag is read (solo = you vs the computer, no call)
+  const [solo, setSolo] = useState<boolean | null>(null);
   useEffect(() => {
+    let s = false;
     try {
-      /* eslint-disable-next-line react-hooks/set-state-in-effect -- one-time read of the solo flag */
-      setSolo(sessionStorage.getItem(`fv:solo:${code}`) === "1");
+      s = sessionStorage.getItem(`fv:solo:${code}`) === "1";
     } catch {
-      /* keep default */
+      /* no sessionStorage — treat as networked */
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time read of the solo flag
+    setSolo(s);
   }, [code]);
 
-  const showVideo = VIDEO_ENABLED && !solo && videoOn;
+  const videoAllowed = VIDEO_UI && solo === false;
+  const showVideo = videoAllowed && videoOn;
 
   return (
     <aside className="flex w-[300px] shrink-0 flex-col border-l border-line bg-surface xl:w-[360px]">
@@ -58,7 +63,7 @@ export function RightRail({ onClose }: { onClose: () => void }) {
             {t.label}
           </button>
         ))}
-        {VIDEO_ENABLED && !solo && (
+        {videoAllowed && (
           <button
             onClick={() => setVideoOn((v) => !v)}
             aria-label={videoOn ? "Hide video" : "Show video"}

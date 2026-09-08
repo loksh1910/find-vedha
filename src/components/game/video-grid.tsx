@@ -2,23 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { useMedia } from "@/components/providers/media-provider";
+import { useMedia, VIDEO_MOCK } from "@/components/providers/media-provider";
 import { SelfTile, PeerTile } from "@/components/media/video-tile";
 import { useGame } from "./game-provider";
 
 type Seat = { id?: string; name: string; isMe: boolean; pawns: string[] };
 
-/** Used when the lobby roster isn't in sessionStorage (e.g. direct link). */
-const FALLBACK: Seat[] = [
-  { name: "You", isMe: true, pawns: ["vedha"] },
-  { name: "Karthik", isMe: false, pawns: ["d1"] },
-  { name: "Divya", isMe: false, pawns: ["d2"] },
-  { name: "Ashwin", isMe: false, pawns: ["d3"] },
-  { name: "Priya", isMe: false, pawns: ["d4"] },
-  { name: "Vetri", isMe: false, pawns: ["d5"] },
-];
+/** Used when the lobby roster isn't in sessionStorage (e.g. a direct link). */
+const FALLBACK: Seat[] = [{ name: "You", isMe: true, pawns: ["vedha"] }];
 
-/** One video tile per player at the table — your live tile plus the rest. */
+/** One video tile per player at the table — your tile plus everyone else. */
 export function VideoGrid() {
   const { game } = useGame();
   const { stream, camOn, micOn, toggleCam, toggleMic, peers: onCall } = useMedia();
@@ -35,15 +28,19 @@ export function VideoGrid() {
         setSeats(parsed);
       }
     } catch {
-      /* keep the fallback table */
+      /* keep the fallback */
     }
   }, [code]);
 
   const me = seats.find((s) => s.isMe) ?? seats[0];
-  const peers = seats.filter((s) => s !== me);
-  const speaking = (s: Seat) =>
-    game.status.kind === "playing" && s.pawns.includes(game.turn);
-  const colorOf = (s: Seat) => game.pawns[s.pawns[0]]?.varName;
+  // one tile per real player — the computer opponent isn't a person on a call
+  const peers = seats.filter(
+    (s) => s !== me && s.id !== "cpu" && s.name !== "Computer",
+  );
+
+  const speaking = (pawns: string[]) =>
+    game.status.kind === "playing" && pawns.includes(game.turn);
+  const colorOf = (pawns: string[]) => game.pawns[pawns[0]]?.varName;
 
   return (
     <div className="flex h-full flex-col">
@@ -54,11 +51,12 @@ export function VideoGrid() {
         <div className="grid grid-cols-2 gap-1.5">
           <SelfTile
             name="You"
-            colorVar={colorOf(me)}
-            speaking={speaking(me)}
+            colorVar={colorOf(me?.pawns ?? [])}
+            speaking={speaking(me?.pawns ?? [])}
             stream={stream}
             camOn={camOn}
             micOn={micOn}
+            mock={VIDEO_MOCK}
             onToggleCam={toggleCam}
             onToggleMic={toggleMic}
           />
@@ -68,10 +66,11 @@ export function VideoGrid() {
               <PeerTile
                 key={s.id ?? `${s.name}-${i}`}
                 name={s.name}
-                colorVar={colorOf(s)}
-                speaking={speaking(s) || !!c?.speaking}
+                colorVar={colorOf(s.pawns)}
+                speaking={speaking(s.pawns) || !!c?.speaking}
                 stream={c?.stream ?? null}
-                camOn={c?.camOn ?? false}
+                mock={VIDEO_MOCK}
+                camOn={c?.camOn ?? VIDEO_MOCK}
                 micOn={c?.micOn ?? true}
               />
             );

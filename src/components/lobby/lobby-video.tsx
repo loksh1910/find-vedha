@@ -1,14 +1,18 @@
 "use client";
 
 import { Video } from "lucide-react";
-import { useMedia, VIDEO_ENABLED } from "@/components/providers/media-provider";
+import {
+  useMedia,
+  VIDEO_UI,
+  VIDEO_MOCK,
+} from "@/components/providers/media-provider";
 import { SelfTile, PeerTile } from "@/components/media/video-tile";
 
 type Peer = { id: string; name: string; avatarId?: string };
 
 const TILE = "w-[128px] shrink-0";
 
-/** Horizontal table strip under the lobby header — your live tile + the table. */
+/** Horizontal table strip under the lobby header — your tile + everyone in the room. */
 export function LobbyVideo({ peers }: { peers: Peer[] }) {
   const {
     stream,
@@ -23,7 +27,7 @@ export function LobbyVideo({ peers }: { peers: Peer[] }) {
   const off = phase === "skipped" || phase === "error";
   const callOf = (id: string) => onCall.find((p) => p.id === id);
 
-  if (!VIDEO_ENABLED) return null;
+  if (!VIDEO_UI) return null;
 
   return (
     <div className="-mx-4 -mt-4 mb-6 flex shrink-0 items-center gap-4 border-b border-line bg-surface px-4 py-3 md:-mx-8 md:-mt-8 md:px-6">
@@ -50,6 +54,7 @@ export function LobbyVideo({ peers }: { peers: Peer[] }) {
             stream={stream}
             camOn={camOn}
             micOn={micOn}
+            mock={VIDEO_MOCK}
             onToggleCam={toggleCam}
             onToggleMic={toggleMic}
           />
@@ -61,7 +66,8 @@ export function LobbyVideo({ peers }: { peers: Peer[] }) {
                 className={TILE}
                 name={p.name}
                 stream={c?.stream ?? null}
-                camOn={c?.camOn ?? false}
+                mock={VIDEO_MOCK}
+                camOn={c?.camOn ?? VIDEO_MOCK}
                 micOn={c?.micOn ?? true}
                 speaking={c?.speaking}
               />
