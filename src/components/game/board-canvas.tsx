@@ -155,7 +155,10 @@ export function BoardCanvas() {
   const onPointerDown = (e: PointerEvent<SVGSVGElement>) => {
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     try {
-      svgRef.current?.setPointerCapture(e.pointerId);
+      // capture on the actual tapped element, not the svg root — capturing
+      // on an ancestor retargets the resulting click event to it, which
+      // silently kills a plain tap on a node (no drag, no pinch involved)
+      (e.target as Element).setPointerCapture?.(e.pointerId);
     } catch {
       /* already gone */
     }
@@ -199,7 +202,7 @@ export function BoardCanvas() {
   const endPointer = (e: PointerEvent<SVGSVGElement>) => {
     pointers.current.delete(e.pointerId);
     try {
-      svgRef.current?.releasePointerCapture(e.pointerId);
+      (e.target as Element).releasePointerCapture?.(e.pointerId);
     } catch {
       /* fine */
     }
