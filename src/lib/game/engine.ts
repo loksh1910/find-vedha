@@ -323,3 +323,39 @@ export function autoDetectiveMove(state: GameState): Move | null {
   }
   return best;
 }
+
+/**
+ * A dumb demo AI for Vedha — NOT the real game. Vedha always sees every
+ * Detective's real position (true for a human player too — only Vedha's own
+ * spot is hidden), so this just runs toward whichever legal stop is farthest
+ * from the nearest Detective. No look-ahead, no ticket management.
+ */
+export function autoVedhaMove(state: GameState): Move | null {
+  if (state.turn !== "vedha") return null;
+  const moves = legalMoves(state, "vedha");
+  if (moves.length === 0) return null;
+
+  const detectiveNodes = ["d1", "d2", "d3", "d4", "d5"]
+    .map((id) => state.pawns[id]?.node)
+    .filter((n): n is number => n != null)
+    .map((n) => BOARD.nodes[n - 1]);
+  if (detectiveNodes.length === 0) {
+    return moves[Math.floor(Math.random() * moves.length)];
+  }
+
+  let best = moves[0];
+  let bestMinD = -Infinity;
+  for (const m of moves) {
+    const n = BOARD.nodes[m.to - 1];
+    let minD = Infinity;
+    for (const dn of detectiveNodes) {
+      const d = (n.x - dn.x) ** 2 + (n.y - dn.y) ** 2;
+      if (d < minD) minD = d;
+    }
+    if (minD > bestMinD) {
+      bestMinD = minD;
+      best = m;
+    }
+  }
+  return best;
+}

@@ -14,6 +14,7 @@ import { useParams, useRouter } from "next/navigation";
 import {
   applyMove,
   autoDetectiveMove,
+  autoVedhaMove,
   canDoubleMove,
   createGame,
   declareDoubleMove,
@@ -100,6 +101,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
   // networked loader so it never fires a stray fetch for a solo room.
   const [solo, setSolo] = useState(false);
   const [ready, setReady] = useState(false);
+  // solo: which pawn(s) the human actually claimed in the lobby — read once
+  // from the stashed roster below. Drives both "is this turn mine" and which
+  // pawns the computer should auto-play; defaults to Vedha until that read
+  // resolves.
+  const [soloMine, setSoloMine] = useState<string[]>(["vedha"]);
   useEffect(() => {
     let s = false;
     try {
@@ -112,6 +118,26 @@ export function GameProvider({ children }: { children: ReactNode }) {
     setReady(true);
   }, [code]);
 
+  // solo: pick up the lobby's roster to learn which pawn(s) are actually the
+  // human's — everything else at the table is the computer's, whether that's
+  // Vedha or four of the five Detectives.
+  useEffect(() => {
+    if (!ready || !solo) return;
+    try {
+      const stashed = JSON.parse(sessionStorage.getItem(`fv:seats:${code}`) ?? "[]") as {
+        isMe?: boolean;
+        pawns?: string[];
+      }[];
+      const mine = stashed.find((s) => s.isMe)?.pawns;
+      if (mine && mine.length) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time read of the lobby's claim
+        setSoloMine(mine);
+      }
+    } catch {
+      /* keep the default (Vedha) */
+    }
+  }, [ready, solo, code]);
+
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const sfx = useSfx();
@@ -120,7 +146,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [seats, setSeats] = useState<GameSeat[]>([]);
   const [uid, setUid] = useState<string | null>(null);
   const [controlsVedha, setControlsVedha] = useState(true);
-  const [viewAs, setViewAsLocal] = useState<Role>("vedha");
+  const [viewAsNetworked, setViewAsLocal] = useState<Role>("vedha");
   const [pending, setPending] = useState<Pending>(null);
   const [chosenTransport, setChosenTransport] = useState<MoveTransport | null>(null);
   const [revealFlash, setRevealFlash] = useState<GameCtx["revealFlash"]>(null);
@@ -257,6 +283,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }, [solo, playing, presSynced, present, game]);
   const vedhaAway = awayPawns.has("vedha");
 
+  // solo: derived from the human's actual claim, not hardcoded — the human
+  // may have picked a Detective and left Vedha to the computer.
+  const viewAs: Role = solo
+    ? soloMine.includes("vedha")
+      ? "vedha"
+      : "detective"
+    : viewAsNetworked;
+
   const chatName = useMemo(() => {
     if (solo) return viewAs === "vedha" ? "You (Vedha)" : "You (Detective)";
     return seats.find((s) => s.uid === uid)?.name ?? "Player";
@@ -276,8 +310,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   const activePawnId = game.turn;
   const myTurn = solo
-    ? game.status.kind === "playing" &&
-      (game.turn === "vedha" ? viewAs === "vedha" : viewAs === "detective")
+    ? game.status.kind === "playing" && soloMine.includes(game.turn)
     : game.status.kind === "playing" && !!mine?.includes(game.turn);
 
   const legalDest = useMemo(() => {
@@ -437,18 +470,19 @@ export function GameProvider({ children }: { children: ReactNode }) {
     });
   }, [solo, code, cancel, fetchGame, flash]);
 
-  // solo = play with computer: it always plays the Detectives on their turn,
-  // no toggle. The human is Vedha (viewAs stays "vedha").
+  // solo = play with computer: the computer plays every pawn the human
+  // didn't claim — that might be Vedha, all five Detectives, or just the
+  // one Detective slot left unclaimed. No toggle.
   useEffect(() => {
     if (!solo) return;
     if (game.status.kind !== "playing") return;
-    if (game.turn === "vedha") return;
+    if (soloMine.includes(game.turn)) return;
     const t = setTimeout(() => {
-      const m = autoDetectiveMove(game);
+      const m = game.turn === "vedha" ? autoVedhaMove(game) : autoDetectiveMove(game);
       setGame((cur) => (cur !== game ? cur : m ? applyMove(cur, m) : cur));
     }, 650);
     return () => clearTimeout(t);
-  }, [solo, game]);
+  }, [solo, game, soloMine]);
 
   // sound cues off state transitions (gated by Settings → Sound)
   useEffect(() => {
@@ -482,20 +516,22 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const meId = data.user?.id;
       if (!meId) return;
       type Stashed = { id: string; name: string; isMe?: boolean; pawns: string[] };
-      let stashed: Stashed[] = [];
+      let myName = "You";
       try {
-        stashed = JSON.parse(sessionStorage.getItem(`fv:seats:${code}`) ?? "[]");
+        const stashed = JSON.parse(
+          sessionStorage.getItem(`fv:seats:${code}`) ?? "[]",
+        ) as Stashed[];
+        myName = stashed.find((s) => s.isMe)?.name ?? myName;
       } catch {
-        /* fall back to viewAs */
+        /* keep the default name */
       }
-      const mine = stashed.find((s) => s.isMe)?.pawns ?? (viewAs === "vedha" ? ["vedha"] : []);
       const allPawns = ["vedha", "d1", "d2", "d3", "d4", "d5"];
       const seats = [
-        { uid: meId, name: stashed.find((s) => s.isMe)?.name ?? "You", pawns: mine },
+        { uid: meId, name: myName, pawns: soloMine },
         {
           uid: "00000000-0000-0000-0000-000000000000",
           name: "Computer",
-          pawns: allPawns.filter((p) => !mine.includes(p)),
+          pawns: allPawns.filter((p) => !soloMine.includes(p)),
         },
       ];
       await supabase.rpc("record_match", {
@@ -505,7 +541,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         p_seats: seats,
       });
     })();
-  }, [solo, game, code, viewAs, supabase]);
+  }, [solo, game, code, soloMine, supabase]);
 
   const value: GameCtx = {
     game,
