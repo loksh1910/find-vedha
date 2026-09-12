@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Bricolage_Grotesque, Poppins } from "next/font/google";
 import "./globals.css";
 import { AppStateProvider } from "@/components/providers/app-state-provider";
@@ -20,6 +20,20 @@ export const metadata: Metadata = {
   title: "Find Vedha",
   description:
     "A hidden-chase party game on a stylised Chennai transit map. Make a private room, one of you is Vedha, the Detectives hunt.",
+  // lets a mobile browser (or a PWABuilder-style Android wrapper) install
+  // this as an app — purely additive, changes nothing about the site itself
+  manifest: "/manifest.json",
+  icons: {
+    icon: [
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: "/icons/icon-192.png",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#131313",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
