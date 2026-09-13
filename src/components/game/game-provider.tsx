@@ -72,6 +72,13 @@ type GameCtx = {
   /** transient "not your turn" / network problems, networked play only */
   moveError: string | null;
 
+  /** networked: still fetching the game for the first time — block the board */
+  connecting: boolean;
+  /** networked: gave up after repeated failures — show a retry screen */
+  connectError: boolean;
+  /** try loading the game again after a connectError */
+  retryConnect: () => void;
+
   /* ---- networked: disconnect / abandonment ---- */
   /** pawn ids with no present controller (from the game presence channel) */
   awayPawns: Set<string>;
@@ -151,6 +158,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [chosenTransport, setChosenTransport] = useState<MoveTransport | null>(null);
   const [revealFlash, setRevealFlash] = useState<GameCtx["revealFlash"]>(null);
   const [moveError, setMoveError] = useState<string | null>(null);
+  // networked: has get_game ever succeeded? While it hasn't, the board would
+  // otherwise silently show the local placeholder game (createGame(SOLO_SEED))
+  // looking perfectly real but never accepting a move from anyone.
+  const [gameLoaded, setGameLoaded] = useState(false);
+  const [connectError, setConnectError] = useState(false);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const errTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const soloRecordedRef = useRef(false);
@@ -191,6 +203,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
     flashOn(payload.state, prevRevealRef.current);
     prevRevealRef.current = payload.state.lastRevealRound;
     setGame(payload.state);
+    setGameLoaded(true);
+    setConnectError(false);
     return true;
   }, [supabase, code, flashOn]);
 
@@ -202,11 +216,15 @@ export function GameProvider({ children }: { children: ReactNode }) {
       if (alive) setUid(data.user?.id ?? null);
     });
 
-    // the row is created by the host as the lobby ends — retry briefly
+    // the row is created by the host as the lobby ends — retry briefly;
+    // if it never comes through, stop silently pretending and say so
     let tries = 0;
     const load = async () => {
       const ok = await fetchGame();
-      if (!ok && alive && tries++ < 12) setTimeout(load, 700);
+      if (!ok && alive) {
+        if (tries++ < 12) setTimeout(load, 700);
+        else setConnectError(true);
+      }
     };
     void load();
 
@@ -282,6 +300,17 @@ export function GameProvider({ children }: { children: ReactNode }) {
     return away;
   }, [solo, playing, presSynced, present, game]);
   const vedhaAway = awayPawns.has("vedha");
+
+  // networked: block the board on a real "connecting…" / "couldn't load"
+  // state instead of silently sitting on the local placeholder game, which
+  // looks like a normal fresh board but will never accept anyone's move.
+  const connecting = ready && !solo && !gameLoaded && !connectError;
+  const retryConnect = useCallback(() => {
+    setConnectError(false);
+    void fetchGame().then((ok) => {
+      if (!ok) setConnectError(true);
+    });
+  }, [fetchGame]);
 
   // solo: derived from the human's actual claim, not hardcoded — the human
   // may have picked a Detective and left Vedha to the computer.
@@ -569,6 +598,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
     revealFlash,
     newGame,
     moveError,
+    connecting,
+    connectError,
+    retryConnect,
     awayPawns,
     vedhaAway,
     takeOver,

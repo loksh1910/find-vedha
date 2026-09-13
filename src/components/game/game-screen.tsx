@@ -10,6 +10,7 @@ import { TicketPanel } from "./ticket-panel";
 import { RightRail } from "./right-rail";
 import { GameOverOverlay } from "./game-over-overlay";
 import { DisconnectOverlay } from "./disconnect-overlay";
+import { ConnectingOverlay } from "./connecting-overlay";
 
 export function GameScreen() {
   const [railOpen, setRailOpen] = useState(true);
@@ -39,6 +40,7 @@ export function GameScreen() {
         </div>
         <GameOverOverlay />
         <DisconnectOverlay />
+        <ConnectingOverlay />
       </div>
     </GameProvider>
   );
