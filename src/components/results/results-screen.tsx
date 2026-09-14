@@ -100,7 +100,7 @@ export function ResultsScreen() {
       return;
     }
     // pull the other players in
-    const others = match.seats
+    const others = (match.seats ?? [])
       .map((s) => s.uid)
       .filter((u) => u && u !== "00000000-0000-0000-0000-000000000000");
     inviteToCode(others, code);
@@ -167,27 +167,33 @@ function Loaded({
 }) {
   const router = useRouter();
   const g = match.state;
-  const players = g.pawns;
+  // defensive: an older/edge-case match row can have a seat with a missing
+  // or empty `pawns` array (a player who left before the game ended, or a
+  // stale recording) — that used to throw mid-render and take the whole
+  // Results screen down with it. Every access below tolerates that.
+  const players = g.pawns ?? {};
+  const seats = match.seats ?? [];
+  const gameLog = g.log ?? [];
 
   const headline =
     match.winner === "detective"
       ? "Detectives win"
-      : match.reason.toLowerCase().includes("surviv")
+      : (match.reason ?? "").toLowerCase().includes("surviv")
         ? "Vedha escapes"
         : "Vedha wins";
 
-  const vedhaSeat = match.seats.find((s) => s.pawns.includes("vedha"));
+  const vedhaSeat = seats.find((s) => s.pawns?.includes("vedha"));
   const catcherSeat =
     match.caughtBy != null
-      ? match.seats.find((s) => s.pawns.includes(match.caughtBy!))
+      ? seats.find((s) => s.pawns?.includes(match.caughtBy!))
       : undefined;
 
   // detective seats in slot order
-  const detSeats = [...match.seats]
-    .filter((s) => !s.pawns.includes("vedha"))
-    .sort((a, b) => (a.pawns[0] ?? "").localeCompare(b.pawns[0] ?? ""));
+  const detSeats = [...seats]
+    .filter((s) => !s.pawns?.includes("vedha"))
+    .sort((a, b) => (a.pawns?.[0] ?? "").localeCompare(b.pawns?.[0] ?? ""));
 
-  const route = g.log.map((e) => e.node);
+  const route = gameLog.map((e) => e.node);
   const board = useRouteBoard(route, match.caughtAt);
 
   return (
@@ -212,7 +218,7 @@ function Loaded({
             </span>
           )}
           <span>
-            <span className="text-muted">Players</span> {match.seats.length}
+            <span className="text-muted">Players</span> {seats.length}
           </span>
           <span>
             <span className="text-muted">Ended</span> {fmtWhen(match.endedAt)}
@@ -270,14 +276,14 @@ function Loaded({
             )}
           </svg>
           <p className="mt-3 font-mono text-[0.72rem] leading-loose text-muted">
-            {g.log.map((e, i) => (
+            {gameLog.map((e, i) => (
               <span key={i}>
                 {i > 0 && <span className="text-faint"> · </span>}
                 <TicketTag t={e.transport} />{" "}
                 <span
                   className={cn(
                     "text-text",
-                    match.caughtAt === e.node && i === g.log.length - 1 && "text-danger",
+                    match.caughtAt === e.node && i === gameLog.length - 1 && "text-danger",
                   )}
                 >
                   #{e.node}
@@ -303,22 +309,22 @@ function Loaded({
                   : `caught on round ${match.rounds}`
               }
             />
-            {detSeats.map((s) => {
-              const pid = s.pawns[0];
-              const p = players[pid];
+            {detSeats.map((s, i) => {
+              const pid = s.pawns?.[0];
+              const p = pid ? players[pid] : undefined;
               const madeCatch =
                 match.caughtByUid === s.uid ||
-                (match.caughtBy != null && s.pawns.includes(match.caughtBy));
+                (match.caughtBy != null && !!s.pawns?.includes(match.caughtBy));
               const line = madeCatch
                 ? "made the catch"
-                : s.pawns.some((x) => players[x]?.stuck)
+                : s.pawns?.some((x) => players[x]?.stuck)
                   ? "ran out of moves"
                   : "in the chase";
               return (
                 <PlayerRow
-                  key={s.uid || pid}
+                  key={s.uid || pid || i}
                   name={s.name}
-                  chip={p?.label ?? pid.toUpperCase()}
+                  chip={p?.label ?? pid?.toUpperCase() ?? "—"}
                   varName={p?.varName ?? "--muted"}
                   line={line}
                   ok={madeCatch}
